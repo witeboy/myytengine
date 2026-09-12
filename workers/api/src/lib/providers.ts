@@ -1,7 +1,7 @@
 // BYOK provider catalog.
 //
 // Single source of truth for: which keys the app accepts, what Settings renders,
-// and how each key is validated. Provider ids ARE the original Base44 env var names
+// and how each key is validated. Provider ids ARE the original platform's env var names
 // so ported functions read naturally:
 //     const key = await ctx.keys.require('GEMINI_API_KEY');
 //

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -28,7 +28,7 @@ export default function LongViralPipeline() {
   const { data: project, refetch: refetchProject } = useQuery({
     queryKey: ['project', projectId],
     queryFn: async () => {
-      const list = await base44.entities.Projects.filter({ id: projectId });
+      const list = await api.entities.Projects.filter({ id: projectId });
       return list[0];
     },
     enabled: !!projectId,
@@ -36,7 +36,7 @@ export default function LongViralPipeline() {
 
   const { data: scripts = [], refetch: refetchScripts } = useQuery({
     queryKey: ['longviral-scripts', projectId],
-    queryFn: () => base44.entities.Scripts.filter({ project_id: projectId }),
+    queryFn: () => api.entities.Scripts.filter({ project_id: projectId }),
     enabled: !!projectId,
   });
 
@@ -54,7 +54,7 @@ export default function LongViralPipeline() {
 
   const handleSaveDuration = async () => {
     setSavingDuration(true);
-    await base44.entities.Projects.update(projectId, { video_duration_minutes: durationMin });
+    await api.entities.Projects.update(projectId, { video_duration_minutes: durationMin });
     await refetchProject();
     setSavingDuration(false);
   };

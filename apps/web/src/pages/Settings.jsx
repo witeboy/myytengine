@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -21,25 +21,25 @@ export default function Settings() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['api-keys'],
-    queryFn: () => base44.keys.list(),
+    queryFn: () => api.keys.list(),
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['api-keys'] });
 
   const saveKey = async (provider, value) => {
-    await base44.keys.set(provider, value);
+    await api.keys.set(provider, value);
     await invalidate();
   };
 
-  const testKey = async (provider, value) => base44.keys.test(provider, value);
+  const testKey = async (provider, value) => api.keys.test(provider, value);
 
   const removeKey = async (provider) => {
-    await base44.keys.remove(provider);
+    await api.keys.remove(provider);
     await invalidate();
   };
 
   const settingsMutation = useMutation({
-    mutationFn: (patch) => base44.keys.saveSettings(patch),
+    mutationFn: (patch) => api.keys.saveSettings(patch),
     onSuccess: invalidate,
   });
 
@@ -47,7 +47,7 @@ export default function Settings() {
     setTestingAll(true);
     setAllResults(null);
     try {
-      const res = await base44.keys.testAll();
+      const res = await api.keys.testAll();
       setAllResults(res);
       await invalidate();
     } catch (err) {

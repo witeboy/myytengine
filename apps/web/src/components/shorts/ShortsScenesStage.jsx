@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,15 +21,15 @@ export default function ShortsScenesStage({ projectId, project, scenes, onRefetc
       // Extract character DNA before breakdown
       setPhase('Extracting character DNA...');
       try {
-        await base44.functions.invoke('extractCharacterDNA', { project_id: projectId });
+        await api.functions.invoke('extractCharacterDNA', { project_id: projectId });
       } catch (e) {
         console.warn('Character DNA extraction failed (non-fatal):', e.message);
       }
 
       setPhase('Breaking script into visual scenes...');
-      await base44.functions.invoke('shortsSceneBreakdown', { project_id: projectId });
+      await api.functions.invoke('shortsSceneBreakdown', { project_id: projectId });
       setPhase('Generating image prompts...');
-      await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
+      await api.functions.invoke('generateScenePrompts', { project_id: projectId });
       setPhase('Scenes ready!');
       await onRefetch();
     } catch (err) {

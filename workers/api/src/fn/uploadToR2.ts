@@ -1,4 +1,4 @@
-// Ported from base44/functions/uploadToR2.ts — HAND-WRITTEN, not codemod output.
+// Ported from the original hosted uploadToR2 function — HAND-WRITTEN, not codemod output.
 //
 // The original drove R2 through an S3-compatible HTTP client and four env vars.
 // A Worker has R2 as a binding, so the SDK, the credentials, the endpoint and the

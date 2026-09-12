@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -28,7 +28,7 @@ export default function SleepVisualsStage({ projectId, project, scenes, onRefetc
     // Step 1: Generate ambient image definitions
     setPhase('Designing ambient images...');
     try {
-      await base44.functions.invoke('sleepSceneBreakdown', { project_id: projectId });
+      await api.functions.invoke('sleepSceneBreakdown', { project_id: projectId });
       await onRefetch();
     } catch (err) {
       if (err?.response?.status === 504) {
@@ -46,7 +46,7 @@ export default function SleepVisualsStage({ projectId, project, scenes, onRefetc
     let promptsDone = false;
     while (!promptsDone) {
       try {
-        const resp = await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
+        const resp = await api.functions.invoke('generateScenePrompts', { project_id: projectId });
         const data = resp.data || resp;
         promptsDone = data.done === true;
         await onRefetch();
@@ -62,13 +62,13 @@ export default function SleepVisualsStage({ projectId, project, scenes, onRefetc
 
     // Step 3: Generate all images
     setPhase('Generating images...');
-    const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+    const freshScenes = await api.entities.Scenes.filter({ project_id: projectId });
     const ready = freshScenes.filter(s => s.status === 'prompts_ready').sort((a, b) => a.scene_number - b.scene_number);
 
     for (const scene of ready) {
       setPhase(`Generating image ${scene.scene_number}/${freshScenes.length}...`);
       try {
-        await base44.functions.invoke('generateSceneImage', { scene_id: scene.id });
+        await api.functions.invoke('generateSceneImage', { scene_id: scene.id });
         await onRefetch();
       } catch (err) {
         console.warn(`Image ${scene.scene_number} failed:`, err.message);
@@ -87,8 +87,8 @@ export default function SleepVisualsStage({ projectId, project, scenes, onRefetc
     setGenerating(true);
     setPhase('Regenerating...');
     try {
-      await base44.entities.Scenes.update(sceneId, { status: 'prompts_ready', image_url: '' });
-      await base44.functions.invoke('generateSceneImage', { scene_id: sceneId });
+      await api.entities.Scenes.update(sceneId, { status: 'prompts_ready', image_url: '' });
+      await api.functions.invoke('generateSceneImage', { scene_id: sceneId });
       await onRefetch();
     } catch (err) {
       console.error('Regen failed:', err);

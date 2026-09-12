@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -17,7 +17,7 @@ export default function ShortsScriptStage({ projectId, project, scripts, onRefet
     setPhase('Generating 90-second Shorts script...');
 
     try {
-      await base44.functions.invoke('shortsGenerateScript', { project_id: projectId });
+      await api.functions.invoke('shortsGenerateScript', { project_id: projectId });
       setPhase('Script generated!');
       await onRefetch();
     } catch (err) {

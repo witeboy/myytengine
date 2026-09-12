@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -28,7 +28,7 @@ export default function SleepScriptStage({ projectId, project, batches, scripts,
     if (!allBatchesDone || hasFinalScript || generating) return;
     (async () => {
       try {
-        await base44.functions.invoke('generateFullScript', { project_id: projectId });
+        await api.functions.invoke('generateFullScript', { project_id: projectId });
         await onRefetch();
       } catch (err) {
         console.error('Merge error:', err);
@@ -42,7 +42,7 @@ export default function SleepScriptStage({ projectId, project, batches, scripts,
       // Initialize batches if needed
       const hasPending = batches.length > 0 && batches.every(b => b.status === 'pending');
       if (!hasPending) {
-        await base44.functions.invoke('initializeScriptBatches', { project_id: projectId });
+        await api.functions.invoke('initializeScriptBatches', { project_id: projectId });
         await onRefetch();
       }
 
@@ -50,7 +50,7 @@ export default function SleepScriptStage({ projectId, project, batches, scripts,
       let allDone = false;
       while (!allDone) {
         try {
-          const resp = await base44.functions.invoke('generateScriptBatches', { project_id: projectId });
+          const resp = await api.functions.invoke('generateScriptBatches', { project_id: projectId });
           const data = resp.data || resp;
           allDone = data.done === true;
           await onRefetch();

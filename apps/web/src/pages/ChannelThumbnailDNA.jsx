@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,7 @@ export default function ChannelThumbnailDNAPage() {
     (async () => {
       const params = new URLSearchParams(window.location.search);
       const channelId = params.get('channel_id');
-      const list = await base44.entities.Channels.list('-created_date', 100);
+      const list = await api.entities.Channels.list('-created_date', 100);
       setChannels(list);
       if (channelId) setSelected(list.find(c => c.id === channelId) || list[0] || null);
       else setSelected(list[0] || null);

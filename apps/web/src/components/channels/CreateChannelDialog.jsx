@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,7 +20,7 @@ export default function CreateChannelDialog({ open, onOpenChange, onCreated }) {
     if (!name.trim() || !niche) return;
     setCreating(true);
     const defaults = getNicheDefaults(niche);
-    const channel = await base44.entities.Channels.create({
+    const channel = await api.entities.Channels.create({
       name: name.trim(),
       niche,
       niche_label: defaults.label,

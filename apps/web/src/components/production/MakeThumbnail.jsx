@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import {
   ArrowLeft, Upload, X, Sparkles, Loader2, Download,
   RefreshCw, Wand2, Image as ImageIcon,
@@ -247,7 +247,7 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise(r => setTimeout(r, 5000));
       try {
-        const res = await base44.functions.invoke('pollThumbnailTask', { task_id: taskId, concept_id: conceptId });
+        const res = await api.functions.invoke('pollThumbnailTask', { task_id: taskId, concept_id: conceptId });
         const data = res?.data ?? res;
         if (data?.completed) {
           if (data?.image_url) return { image_url: data.image_url };
@@ -308,7 +308,7 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
 
       let conceptsResult;
       try {
-        conceptsResult = await base44.functions.invoke('newThumbnailConcept', {
+        conceptsResult = await api.functions.invoke('newThumbnailConcept', {
           video_title:  title.trim(),
           summary:      summary.trim() || '',
           char_count:   uploadedChars.length,
@@ -339,7 +339,7 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
       const saved = [];
       for (const id of conceptIds) {
         try {
-          const record = await base44.entities.ThumbnailConcepts.get(id);
+          const record = await api.entities.ThumbnailConcepts.get(id);
           if (record) saved.push(record);
         } catch (_) {}
       }
@@ -444,7 +444,7 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
       // Collect character descriptions
       const charDescs = chars.filter(Boolean).map(c => c.description || '');
 
-      const raw = await base44.functions.invoke('generateNewThumbnailImage', {
+      const raw = await api.functions.invoke('generateNewThumbnailImage', {
         concept_id:   effectiveConcept.id,
         char_photos:  directCharPhotos.length > 0 ? directCharPhotos : undefined,
         template_ref: directTemplate || undefined,

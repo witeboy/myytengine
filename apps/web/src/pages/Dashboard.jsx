@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import OverallStats from '@/components/dashboard/OverallStats';
 import QuickShortcuts from '@/components/dashboard/QuickShortcuts';
@@ -15,21 +15,21 @@ export default function Dashboard() {
 
   const { data: channels = [], isLoading: loadingCh } = useQuery({
     queryKey: ['dashboard-channels'],
-    queryFn: () => base44.entities.Channels.filter({ status: 'active' }),
+    queryFn: () => api.entities.Channels.filter({ status: 'active' }),
   });
 
   const { data: topics = [], isLoading: loadingTopics } = useQuery({
     queryKey: ['dashboard-topics'],
-    queryFn: () => base44.entities.ChannelTopics.list('-created_date', 500),
+    queryFn: () => api.entities.ChannelTopics.list('-created_date', 500),
   });
 
   const { data: projects = [], isLoading: loadingProjects } = useQuery({
     queryKey: ['dashboard-projects'],
-    queryFn: () => base44.entities.Projects.list('-created_date', 100),
+    queryFn: () => api.entities.Projects.list('-created_date', 100),
   });
 
   const archiveMutation = useMutation({
-    mutationFn: (id) => base44.entities.Projects.update(id, { archived: true }),
+    mutationFn: (id) => api.entities.Projects.update(id, { archived: true }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['dashboard-projects'] }),
   });
 

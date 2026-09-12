@@ -222,7 +222,7 @@ export async function openai(ctx: Ctx, path: string, body: unknown, opts: { time
 
 // ── Core.InvokeLLM replacement ────────────────────────────────────────────────
 //
-// Reproduces Base44's `integrations.Core.InvokeLLM` contract used at 23 backend and 18
+// Reproduces the original platform's `integrations.Core.InvokeLLM` contract used at 23 backend and 18
 // frontend sites: plain prompt -> string; prompt + response_json_schema -> object.
 
 export interface InvokeLLMArgs {
@@ -241,7 +241,7 @@ export async function invokeLLM(ctx: Ctx, args: InvokeLLMArgs): Promise<any> {
     (hasSchema
       ? 'You are a helpful assistant. Respond ONLY with valid JSON — no preamble, no markdown fences, no explanation. Just the raw JSON object.'
       : undefined);
-  // Base44 used this schema to shape its response. Merely requesting JSON loses
+  // the original platform used this schema to shape its response. Merely requesting JSON loses
   // field names/types (for example summary: string becomes a nested object).
   const system = hasSchema
     ? `${baseSystem || ''}\n\nReturn a JSON value matching this JSON Schema exactly:\n${JSON.stringify(args.response_json_schema)}`

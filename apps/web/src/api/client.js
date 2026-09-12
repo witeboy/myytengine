@@ -6,9 +6,6 @@
 //     api.auth.me() / logout() / redirectToLogin()
 //     api.integrations.Core.InvokeLLM / UploadFile / GenerateImage
 //
-// Because the shape matches, call sites import it as `{ api as base44 }` and NOT ONE
-// of the ~250 existing usage lines changes.
-//
 // There is exactly one path per function now; no retry or path-shape fallback.
 
 import { ENTITY_NAMES } from './entities';
@@ -184,8 +181,5 @@ const keys = {
 };
 
 export const api = { entities, functions, auth, integrations, keys };
-
-/** Alias kept so existing imports (`import { api as base44 } from '@/api/client'`) work. */
-export const base44 = api;
 
 export default api;

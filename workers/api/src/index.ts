@@ -2,9 +2,9 @@
 //
 // Routes:
 //   GET  /api/health                 no auth — liveness
-//   GET  /api/auth/me                current user           [replaces base44.auth.me]
-//   POST /api/db/:entity/:op         entity CRUD            [replaces base44.entities.*]
-//   POST /api/fn/:name               ported functions       [replaces base44.functions.invoke]
+//   GET  /api/auth/me                current user           [replaces the original platform.auth.me]
+//   POST /api/db/:entity/:op         entity CRUD            [replaces the hosted entity SDK]
+//   POST /api/fn/:name               ported functions       [replaces the hosted functions SDK]
 //   POST /api/upload                 multipart -> R2        [replaces Core.UploadFile]
 //   GET  /api/keys                   BYOK catalog + status
 //   POST /api/keys/{set,test,testAll,delete,settings}
@@ -149,7 +149,7 @@ export default {
 } satisfies ExportedHandler<Env>;
 
 /**
- * Replaces `base44.integrations.Core.UploadFile`. Returns the same `{ file_url }`
+ * Replaces `the hosted UploadFile integration`. Returns the same `{ file_url }`
  * shape the frontend already reads (VoiceoverPanel and the timeline uploader).
  */
 async function handleUpload(req: Request, ctx: Ctx): Promise<{ file_url: string; key: string }> {

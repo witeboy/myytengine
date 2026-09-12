@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Pencil, Check, X } from 'lucide-react';
 
 export default function EditableTopicTitle({ topic, onUpdated, className = '' }) {
@@ -21,10 +21,10 @@ export default function EditableTopicTitle({ topic, onUpdated, className = '' })
       setEditing(false);
       return;
     }
-    await base44.entities.ChannelTopics.update(topic.id, { title: trimmed });
+    await api.entities.ChannelTopics.update(topic.id, { title: trimmed });
     // Also update the project name if one exists
     if (topic.project_id) {
-      try { await base44.entities.Projects.update(topic.project_id, { name: trimmed }); } catch (_) {}
+      try { await api.entities.Projects.update(topic.project_id, { name: trimmed }); } catch (_) {}
     }
     setEditing(false);
     onUpdated?.();

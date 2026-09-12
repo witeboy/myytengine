@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Badge } from '@/components/ui/badge';
 import JSZip from 'jszip';
 import {
@@ -157,12 +157,12 @@ export default function TopicAssetsPanel({ projectId, topicTitle }) {
     setLoading(true);
     try {
       const [projects, prodSettings, metaList, thumbnails, musicTracks, scripts] = await Promise.all([
-        base44.entities.Projects.filter({ id: projectId }),
-        base44.entities.ProductionSettings.filter({ project_id: projectId }),
-        base44.entities.UploadMetadata.filter({ project_id: projectId }),
-        base44.entities.ThumbnailConcepts.filter({ project_id: projectId }),
-        base44.entities.MusicTracks.filter({ project_id: projectId }),
-        base44.entities.Scripts.filter({ project_id: projectId }),
+        api.entities.Projects.filter({ id: projectId }),
+        api.entities.ProductionSettings.filter({ project_id: projectId }),
+        api.entities.UploadMetadata.filter({ project_id: projectId }),
+        api.entities.ThumbnailConcepts.filter({ project_id: projectId }),
+        api.entities.MusicTracks.filter({ project_id: projectId }),
+        api.entities.Scripts.filter({ project_id: projectId }),
       ]);
 
       const project = projects[0];

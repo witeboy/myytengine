@@ -41,7 +41,7 @@ afterEach(async () => {
   trackedRows = [];
 });
 
-describe('D1/R2 Base44 parity', () => {
+describe('D1/R2 the original platform parity', () => {
   it('1. filter({}) returns [] for representative empty tables', async () => {
     for (const entity of ['Projects', 'Scenes', 'ProductionSettings', 'UploadMetadata']) {
       expect(await db[entity].filter({})).toEqual([]);

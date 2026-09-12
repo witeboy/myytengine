@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,7 @@ export default function StoryScript() {
   const { data: project, refetch: refetchProject } = useQuery({
     queryKey: ['project', projectId],
     queryFn: async () => {
-      const list = await base44.entities.Projects.filter({ id: projectId });
+      const list = await api.entities.Projects.filter({ id: projectId });
       return list[0];
     },
     enabled: !!projectId,
@@ -29,7 +29,7 @@ export default function StoryScript() {
   const { data: batches = [], isLoading: batchesLoading, refetch: refetchBatches } = useQuery({
     queryKey: ['batches', projectId],
     queryFn: async () => {
-      const all = await base44.entities.ScriptBatches.filter({ project_id: projectId });
+      const all = await api.entities.ScriptBatches.filter({ project_id: projectId });
       return all.sort((a, b) => a.batch_number - b.batch_number);
     },
     enabled: !!projectId,
@@ -38,7 +38,7 @@ export default function StoryScript() {
 
   const { data: scripts = [], refetch: refetchScripts } = useQuery({
     queryKey: ['scripts', projectId],
-    queryFn: () => base44.entities.Scripts.filter({ project_id: projectId }),
+    queryFn: () => api.entities.Scripts.filter({ project_id: projectId }),
     enabled: !!projectId,
     refetchInterval: (data) => {
       const hasFinal = Array.isArray(data) && data.some(s => s.version === 'final_aggregated');
@@ -50,7 +50,7 @@ export default function StoryScript() {
   useEffect(() => {
     if (!project) return;
     if (!project.project_mode && project.explainer_arc) {
-      base44.entities.Projects.update(projectId, { project_mode: 'explainer' })
+      api.entities.Projects.update(projectId, { project_mode: 'explainer' })
         .then(() => refetchProject())
         .catch(() => {});
     }
@@ -78,7 +78,7 @@ export default function StoryScript() {
       setStuckReset(true);
       console.log(`Resetting ${stuck.length} stuck 'generating' batches back to 'pending'`);
       Promise.all(
-        stuck.map(b => base44.entities.ScriptBatches.update(b.id, { status: 'pending' }))
+        stuck.map(b => api.entities.ScriptBatches.update(b.id, { status: 'pending' }))
       ).then(() => refetchBatches());
     }
   }, [batches, batchesLoading, generating, stuckReset]);
@@ -97,7 +97,7 @@ export default function StoryScript() {
       const MAX_RETRIES = 3;
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
-          const resp = await base44.functions.invoke('shortsGenerateScript', { project_id: projectId });
+          const resp = await api.functions.invoke('shortsGenerateScript', { project_id: projectId });
           const data = resp.data || resp;
           console.log('Shorts script generated:', data);
           await Promise.all([refetchProject(), refetchScripts()]);
@@ -139,13 +139,13 @@ export default function StoryScript() {
 
     const runFullGeneration = async () => {
       try {
-        const freshBatches = await base44.entities.ScriptBatches.filter({ project_id: projectId });
+        const freshBatches = await api.entities.ScriptBatches.filter({ project_id: projectId });
         const hasPendingBatches = freshBatches.length > 0 && freshBatches.some(b => b.status === 'pending');
 
         if (!hasPendingBatches) {
-          const oldScripts = await base44.entities.Scripts.filter({ project_id: projectId });
-          for (const s of oldScripts) await base44.entities.Scripts.delete(s.id);
-          for (const b of freshBatches) await base44.entities.ScriptBatches.delete(b.id);
+          const oldScripts = await api.entities.Scripts.filter({ project_id: projectId });
+          for (const s of oldScripts) await api.entities.Scripts.delete(s.id);
+          for (const b of freshBatches) await api.entities.ScriptBatches.delete(b.id);
 
           // initializeScriptBatches is mode-aware (handles explainer, sleep, standard internally)
           await invokeInitWithRetry();
@@ -174,7 +174,7 @@ export default function StoryScript() {
     const MAX = 4;
     for (let attempt = 1; attempt <= MAX; attempt++) {
       try {
-        return await base44.functions.invoke('initializeScriptBatches', { project_id: projectId });
+        return await api.functions.invoke('initializeScriptBatches', { project_id: projectId });
       } catch (err) {
         const status = err?.response?.status || err?.status;
         if (status === 404 && attempt < MAX) {
@@ -198,7 +198,7 @@ export default function StoryScript() {
 
       while (retries < MAX_RETRIES && !success) {
         try {
-          const resp  = await base44.functions.invoke('generateScriptBatches', { project_id: projectId });
+          const resp  = await api.functions.invoke('generateScriptBatches', { project_id: projectId });
           const data  = resp.data || resp;
           success     = true;
           allDone     = data.done === true;
@@ -212,7 +212,7 @@ export default function StoryScript() {
 
           if (status === 504 || status === 500 || status === 502) {
             await new Promise(r => setTimeout(r, 5000));
-            const freshBatches = await base44.entities.ScriptBatches.filter({ project_id: projectId });
+            const freshBatches = await api.entities.ScriptBatches.filter({ project_id: projectId });
             const stillPending = freshBatches.filter(b => b.status === 'pending' || b.status === 'generating');
             if (stillPending.length === 0) { success = true; allDone = true; break; }
           }
@@ -238,7 +238,7 @@ export default function StoryScript() {
         try {
           console.log('All batches complete. Starting final merge...');
           // mode omitted → defaults to merge
-          await base44.functions.invoke('generateFullScript', { project_id: projectId });
+          await api.functions.invoke('generateFullScript', { project_id: projectId });
           await Promise.all([refetchProject(), refetchScripts()]);
         } catch (err) {
           console.error('Merge error:', err);
@@ -252,15 +252,15 @@ export default function StoryScript() {
   const handleRegenerate = async () => {
     setRegenerating(true);
 
-    for (const s of scripts) await base44.entities.Scripts.delete(s.id);
+    for (const s of scripts) await api.entities.Scripts.delete(s.id);
 
     if (isShorts) {
-      await base44.entities.Projects.update(projectId, { status: 'hooks_ready', script_id: '' });
+      await api.entities.Projects.update(projectId, { status: 'hooks_ready', script_id: '' });
       await refetchScripts();
       setGenerating(true);
       setRegenerating(false);
       try {
-        await base44.functions.invoke('shortsGenerateScript', { project_id: projectId });
+        await api.functions.invoke('shortsGenerateScript', { project_id: projectId });
         await Promise.all([refetchProject(), refetchScripts()]);
       } catch (err) {
         console.error('Shorts regeneration error:', err);
@@ -271,13 +271,13 @@ export default function StoryScript() {
     }
 
     for (const b of batches) {
-      await base44.entities.ScriptBatches.update(b.id, {
+      await api.entities.ScriptBatches.update(b.id, {
         content: '', word_count: 0, status: 'pending', scene_image_url: '',
       });
     }
 
     const isSleepProject = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
-    await base44.entities.Projects.update(projectId, {
+    await api.entities.Projects.update(projectId, {
       status: isSleepProject ? 'outline_ready' : 'hooks_ready',
       script_id: '',
     });
@@ -338,7 +338,7 @@ export default function StoryScript() {
                     <select
                       value={project.explainer_arc || 'professor'}
                       onChange={async e => {
-                        await base44.entities.Projects.update(projectId, { explainer_arc: e.target.value });
+                        await api.entities.Projects.update(projectId, { explainer_arc: e.target.value });
                         await refetchProject();
                       }}
                       className="font-mono font-semibold text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded text-xs border border-emerald-300 cursor-pointer hover:bg-emerald-200"
@@ -379,7 +379,7 @@ export default function StoryScript() {
                     onClick={async () => {
                       setGenerating(true);
                       try {
-                        await base44.functions.invoke('generateFullScript', { project_id: projectId });
+                        await api.functions.invoke('generateFullScript', { project_id: projectId });
                         await refetchScripts();
                       } finally {
                         setGenerating(false);
@@ -449,9 +449,9 @@ export default function StoryScript() {
                       onClick={async () => {
                         setGenerating(true);
                         try {
-                          const current = await base44.entities.ScriptBatches.filter({ project_id: projectId });
+                          const current = await api.entities.ScriptBatches.filter({ project_id: projectId });
                           for (const b of current.filter(b => b.status === 'generating')) {
-                            await base44.entities.ScriptBatches.update(b.id, { status: 'pending' });
+                            await api.entities.ScriptBatches.update(b.id, { status: 'pending' });
                           }
                           await refetchBatches();
                           await generateBatchesWithRetry();

@@ -75,7 +75,7 @@ function requireBunny(env: Env) {
 
 /**
  * Hostnames of our own media storage, for the asset-proxy allowlists. The original
- * allowlists named provider CDNs plus the Base44-era storage hosts; after the storage
+ * allowlists named provider CDNs plus the original platform's storage hosts; after the storage
  * migration the app's own durable media lives on MEDIA_PUBLIC_BASE (R2 custom domain)
  * or the Bunny CDN, so those hosts must be proxyable or exports of our own assets fail.
  */

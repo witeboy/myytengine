@@ -97,5 +97,5 @@ export async function fetchJson(
 
 export const nowIso = () => new Date().toISOString();
 
-/** Base44 ids were opaque strings; any collision-free id works. */
+/** the original platform ids were opaque strings; any collision-free id works. */
 export const newId = () => crypto.randomUUID().replace(/-/g, '');

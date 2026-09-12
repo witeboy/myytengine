@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -78,7 +78,7 @@ export default function NewProject() {
     setError('');
     try {
       // "I Have a Topic" — use the user's EXACT topic. No AI topic generation.
-      const project = await base44.entities.Projects.create({
+      const project = await api.entities.Projects.create({
         name: customTopic.trim(),
         niche: customTopic.trim(),
         tone,
@@ -88,14 +88,14 @@ export default function NewProject() {
         ...modePayload(),
       });
       // Create the topic directly from what the user typed, mark it selected.
-      const topic = await base44.entities.Topics.create({
+      const topic = await api.entities.Topics.create({
         project_id: project.id,
         rank: 1,
         title: customTopic.trim(),
         description: targetAudience.trim() ? `For ${targetAudience.trim()}` : '',
         is_selected: true,
       });
-      await base44.entities.Projects.update(project.id, {
+      await api.entities.Projects.update(project.id, {
         selected_topic_id: topic.id,
       });
       navigate(createPageUrl(`StoryDuration?project_id=${project.id}`));
@@ -322,7 +322,7 @@ export default function NewProject() {
                       const durationMin = isShorts ? 1.5 : Math.max(1, Math.round(wordCount / 150));
 
                       // 1. Create the project
-                      const project = await base44.entities.Projects.create({
+                      const project = await api.entities.Projects.create({
                         name: pasteName.trim(),
                         niche: pasteName.trim(),
                         tone: 'dramatic',
@@ -334,7 +334,7 @@ export default function NewProject() {
                       });
 
                       // 2. Create the script entity directly as final_aggregated
-                      await base44.entities.Scripts.create({
+                      await api.entities.Scripts.create({
                         project_id: project.id,
                         version: 'final_aggregated',
                         full_script: pasteScript.trim(),

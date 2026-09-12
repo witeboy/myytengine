@@ -1,4 +1,4 @@
-// Ported from base44/functions/generateSoundEffect.ts — HAND-WRITTEN.
+// Ported from the original hosted generateSoundEffect function — HAND-WRITTEN.
 //
 // House rule: AI33.pro owns all audio out. Sound effects run through AI33's Suno
 // endpoint (`/v1s/task/music-generation`) in simple mode with `make_instrumental: true`

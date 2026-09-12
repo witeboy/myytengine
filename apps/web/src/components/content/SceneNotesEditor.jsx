@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { MessageSquare, Check, X } from 'lucide-react';
@@ -11,7 +11,7 @@ export default function SceneNotesEditor({ scene, onSaved }) {
 
   const handleSave = async () => {
     setSaving(true);
-    await base44.entities.Scenes.update(scene.id, { notes });
+    await api.entities.Scenes.update(scene.id, { notes });
     setSaving(false);
     setEditing(false);
     onSaved?.();

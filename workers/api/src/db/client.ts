@@ -1,12 +1,12 @@
-// Entity client — the drop-in replacement for `base44.entities.*`.
+// Entity client — the drop-in replacement for the original hosted entity SDK.
 // See MIGRATION-PLAN.md C-2 (semantics) and C-3 (table shape).
 //
-// Behaviour that MUST match Base44, because ~440 call sites depend on it:
+// Behaviour that MUST match the original platform, because ~440 call sites depend on it:
 //   • filter(where, sort?, limit?, offset?)  equality AND; returns [] never null
 //   • list(sort?, limit?, offset?)           default sort '-created_date'
 //   • update(id, values)                     PARTIAL merge, not replace
 //   • create/update                          return the FULL row
-//   • unknown fields round-trip              (Base44 was schemaless -> `attrs`)
+//   • unknown fields round-trip              (the original platform was schemaless -> `attrs`)
 //
 // Call sites observed in the repo, for reference:
 //   .filter({ project_id }, 'scene_number', PAGE, offset)

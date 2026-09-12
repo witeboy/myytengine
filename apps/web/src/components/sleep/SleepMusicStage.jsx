@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +15,7 @@ export default function SleepMusicStage({ projectId, project, onRefetch }) {
     if (!projectId || loaded) return;
     (async () => {
       try {
-        const t = await base44.entities.MusicTracks.filter({ project_id: projectId });
+        const t = await api.entities.MusicTracks.filter({ project_id: projectId });
         setTracks(t || []);
       } catch (_) {}
       setLoaded(true);
@@ -31,14 +31,14 @@ export default function SleepMusicStage({ projectId, project, onRefetch }) {
       const durationMin = project?.video_duration_minutes || 15;
       const topicName = project?.name || 'peaceful sleep';
 
-      await base44.functions.invoke('generateMusic', {
+      await api.functions.invoke('generateMusic', {
         project_id: projectId,
         prompt: `432 Hz deep sleep ambient music for a ${durationMin}-minute ${project?.project_mode === 'sleep_meditation' ? 'guided meditation' : 'sleep story'} about "${topicName}". Ultra-calming, no percussion, no vocals. Gentle pads, soft atmospheric textures, very slow harmonic movement. Binaural-friendly, designed to induce deep relaxation and sleep. Think Brian Eno ambient meets 432 Hz healing frequency music. Extremely minimal, spacious, almost silent at times.`,
         mood: 'ambient_sleep',
         genre: '432hz_ambient'
       });
 
-      const refreshed = await base44.entities.MusicTracks.filter({ project_id: projectId });
+      const refreshed = await api.entities.MusicTracks.filter({ project_id: projectId });
       setTracks(refreshed || []);
       await onRefetch();
     } catch (err) {

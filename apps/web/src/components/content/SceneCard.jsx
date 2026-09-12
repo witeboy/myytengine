@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -38,18 +38,18 @@ function FixPromptButton({ sceneId, projectId, onFixed }) {
     try {
       if (type === 'ai_clean') {
         // Fetch the current scene prompt, clean it via OpenAI, and save
-        const sceneList = await base44.entities.Scenes.filter({ id: sceneId });
+        const sceneList = await api.entities.Scenes.filter({ id: sceneId });
         const scene = sceneList[0];
         if (scene?.image_prompt) {
-          const projectList = await base44.entities.Projects.filter({ id: projectId });
+          const projectList = await api.entities.Projects.filter({ id: projectId });
           const visualStyle = projectList[0]?.visual_style || '';
-          const resp = await base44.functions.invoke('cleanScenePrompt', {
+          const resp = await api.functions.invoke('cleanScenePrompt', {
             prompt: scene.image_prompt,
             visual_style: visualStyle
           });
           const data = resp.data || resp;
           if (data.cleaned_prompt && data.cleaned_prompt !== scene.image_prompt) {
-            await base44.entities.Scenes.update(sceneId, { image_prompt: data.cleaned_prompt });
+            await api.entities.Scenes.update(sceneId, { image_prompt: data.cleaned_prompt });
             setResult({ fixed: 1, total: 1 });
           } else {
             setResult({ fixed: 0, total: 1 });
@@ -57,7 +57,7 @@ function FixPromptButton({ sceneId, projectId, onFixed }) {
         }
         onFixed?.();
       } else {
-        const resp = await base44.functions.invoke('fixScenePrompts', {
+        const resp = await api.functions.invoke('fixScenePrompts', {
           project_id: projectId,
           scene_id: sceneId,
           fix_type: type
@@ -190,7 +190,7 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
     setLoadingVideo(true);
     pollRef.current = setInterval(async () => {
       try {
-        const res = await base44.functions.invoke('pollSceneVideo', { scene_id: scene.id });
+        const res = await api.functions.invoke('pollSceneVideo', { scene_id: scene.id });
         const status = res.data?.status;
         if (status === 'COMPLETED' || status === 'FAILED') {
           clearInterval(pollRef.current);
@@ -228,7 +228,7 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
 
   const handleRephrase = async () => {
     setRephrasing(true);
-    await base44.functions.invoke('rephraseScenePrompt', { scene_id: scene.id });
+    await api.functions.invoke('rephraseScenePrompt', { scene_id: scene.id });
     onSceneUpdated?.();
     setRephrasing(false);
   };
@@ -336,7 +336,7 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
           <BrollPreview
             scene={scene}
             onRemove={async () => {
-              await base44.entities.Scenes.update(scene.id, {
+              await api.entities.Scenes.update(scene.id, {
                 broll_url: '',
                 broll_source: '',
                 broll_id: '',

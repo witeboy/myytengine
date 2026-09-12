@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +29,7 @@ export default function SeoDescriptionsPanel({ descriptions, tagsBreakdown, hash
   const handleSave = async () => {
     if (!metadata) return;
     const keys = ['description_template', 'description_alt_1', 'description_alt_2'];
-    await base44.entities.UploadMetadata.update(metadata.id, { [keys[activeDesc]]: editText });
+    await api.entities.UploadMetadata.update(metadata.id, { [keys[activeDesc]]: editText });
     onRefetch();
     setEditing(false);
   };

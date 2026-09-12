@@ -5,7 +5,7 @@
 // Handles both plain-text and JSON-schema responses identically to the original
 // built-in InvokeLLM so all existing call sites work without changes.
 // ─────────────────────────────────────────────────────────────────────────────
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 
 export async function invokeLLM({ prompt, response_json_schema, max_tokens }) {
   const hasSchema = !!response_json_schema;
@@ -17,7 +17,7 @@ export async function invokeLLM({ prompt, response_json_schema, max_tokens }) {
 
   const effectiveMaxTokens = max_tokens || (hasSchema ? 2000 : 4000);
 
-  const res = await base44.functions.invoke('callClaudeProxy', {
+  const res = await api.functions.invoke('callClaudeProxy', {
     system,
     prompt,
     max_tokens: effectiveMaxTokens,

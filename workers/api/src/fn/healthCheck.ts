@@ -1,6 +1,6 @@
-// Ported from base44/functions/healthCheck.ts
+// Ported from the original hosted healthCheck function
 //
-// Original pinged every function through base44.functions.invoke to wake stale
+// Original pinged every function through the hosted functions SDK to wake stale
 // Deno isolates. Workers have no cold-isolate problem of that kind, so the useful
 // signal here is different: which BYOK keys are present and working, plus D1/R2
 // reachability. HealthCheckButton renders whatever `report` contains, so the

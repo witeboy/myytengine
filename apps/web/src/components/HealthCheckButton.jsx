@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Activity, CheckCircle2, AlertTriangle, Loader2, X } from 'lucide-react';
@@ -14,7 +14,7 @@ export default function HealthCheckButton() {
     setResult(null);
     setShowPanel(true);
     try {
-      const res = await base44.functions.invoke('healthCheck', {});
+      const res = await api.functions.invoke('healthCheck', {});
       setResult(res.data || res);
     } catch (e) {
       setResult({ error: e.message });

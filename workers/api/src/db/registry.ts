@@ -1,4 +1,4 @@
-// GENERATED from base44/entities/*.jsonc - see MIGRATION-PLAN.md C-3 / C-4.
+// GENERATED from the original entity schemas - see MIGRATION-PLAN.md C-3 / C-4.
 // `cols`  : declared columns, with the JSON type used to (de)serialize them.
 // `cold`  : fields offloaded to R2 when serialized length exceeds COLD_THRESHOLD.
 // Anything written that is NOT in `cols` lands in the `attrs` JSON column.

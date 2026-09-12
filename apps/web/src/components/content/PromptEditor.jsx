@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Save, ImageIcon, RotateCcw } from 'lucide-react';
@@ -19,7 +19,7 @@ export default function PromptEditor({ scene, onSaved, onRegenerateImage }) {
 
   const handleSave = async () => {
     setSaving(true);
-    await base44.entities.Scenes.update(scene.id, {
+    await api.entities.Scenes.update(scene.id, {
       image_prompt: imagePrompt,
       animation_prompt: animPrompt,
     });
@@ -31,7 +31,7 @@ export default function PromptEditor({ scene, onSaved, onRegenerateImage }) {
   const handleSaveAndRegenerate = async () => {
     setRegenerating(true);
     // Save first
-    await base44.entities.Scenes.update(scene.id, {
+    await api.entities.Scenes.update(scene.id, {
       image_prompt: imagePrompt,
       animation_prompt: animPrompt,
       status: 'prompts_ready', // reset status so image gen picks it up

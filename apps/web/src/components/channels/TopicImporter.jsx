@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -41,7 +41,7 @@ export default function TopicImporter({ open, onOpenChange, channel, onImported 
     setPhase('Checking for duplicates...');
 
     // Fetch existing topics for this channel
-    const existingTopics = await base44.entities.ChannelTopics.filter({ channel_id: channel.id });
+    const existingTopics = await api.entities.ChannelTopics.filter({ channel_id: channel.id });
     const existingTitles = existingTopics.map(t => ({ id: t.id, title: t.title }));
 
     if (existingTitles.length === 0) {
@@ -86,7 +86,7 @@ Return JSON:
 
     try {
       // Secure call to your backend function
-      const response = await base44.functions.invoke('safeGeminiCall', {
+      const response = await api.functions.invoke('safeGeminiCall', {
         prompt: promptText,
         temperature: 0.2 // Low temp for structured JSON response
       });
@@ -151,7 +151,7 @@ Return JSON:
     if (existingIdsToDelete.length > 0) {
       setPhase(`Removing ${existingIdsToDelete.length} duplicate existing topics...`);
       for (const id of existingIdsToDelete) {
-        await base44.entities.ChannelTopics.delete(id);
+        await api.entities.ChannelTopics.delete(id);
       }
     }
 
@@ -200,15 +200,15 @@ Return JSON:
       priority: i,
     }));
 
-    await base44.entities.ChannelTopics.bulkCreate(topicData);
+    await api.entities.ChannelTopics.bulkCreate(topicData);
 
     const existing = channel.total_topics || 0;
-    await base44.entities.Channels.update(channel.id, {
+    await api.entities.Channels.update(channel.id, {
       total_topics: existing + titles.length,
     });
 
     setPhase('AI is analyzing topics and assigning formats...');
-    await base44.functions.invoke('parseAndScheduleTopics', {
+    await api.functions.invoke('parseAndScheduleTopics', {
       channel_id: channel.id,
     }).catch((err) => console.warn('Scheduling error:', err));
 

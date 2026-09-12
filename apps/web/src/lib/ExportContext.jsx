@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useRef, useCallback } from 'react';
 import { saveExportedVideo } from '@/utils/videoStorage';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 
 const ExportContext = createContext(null);
 
@@ -79,7 +79,7 @@ export function ExportProvider({ children }) {
     console.log(`☁️ Starting R2 upload: ${sizeMB}MB in ${totalChunks} chunks`);
 
     // Step 1: Init multipart upload
-    const initRes = await base44.functions.invoke('uploadToR2', {
+    const initRes = await api.functions.invoke('uploadToR2', {
       action: 'init',
       filename,
       content_type: 'video/mp4',
@@ -113,7 +113,7 @@ export function ExportProvider({ children }) {
       let retries = 0;
       while (retries < 3) {
         try {
-          chunkRes = await base44.functions.invoke('uploadToR2', {
+          chunkRes = await api.functions.invoke('uploadToR2', {
             action: 'chunk',
             upload_id,
             r2_key,
@@ -125,7 +125,7 @@ export function ExportProvider({ children }) {
           retries++;
           if (retries >= 3) {
             // Abort the multipart upload on failure
-            await base44.functions.invoke('uploadToR2', { action: 'abort', upload_id, r2_key }).catch(() => {});
+            await api.functions.invoke('uploadToR2', { action: 'abort', upload_id, r2_key }).catch(() => {});
             throw new Error(`Chunk ${partNumber} failed after 3 retries: ${err.message}`);
           }
           await new Promise(r => setTimeout(r, 2000 * retries));
@@ -134,7 +134,7 @@ export function ExportProvider({ children }) {
 
       const chunkData = chunkRes.data || chunkRes;
       if (!chunkData.success) {
-        await base44.functions.invoke('uploadToR2', { action: 'abort', upload_id, r2_key }).catch(() => {});
+        await api.functions.invoke('uploadToR2', { action: 'abort', upload_id, r2_key }).catch(() => {});
         throw new Error(chunkData.error || `Chunk ${partNumber} failed`);
       }
 
@@ -144,7 +144,7 @@ export function ExportProvider({ children }) {
     }
 
     // Step 3: Complete multipart upload
-    const completeRes = await base44.functions.invoke('uploadToR2', {
+    const completeRes = await api.functions.invoke('uploadToR2', {
       action: 'complete',
       upload_id,
       r2_key,

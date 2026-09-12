@@ -1,4 +1,4 @@
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 
 // ══════════════════════════════════════════════════════════════════
 // Frontend ASR Transcription — submit/poll pattern
@@ -18,7 +18,7 @@ const POLL_TIMEOUT = 180000; // 3 min max
  */
 export async function transcribeVoiceover(voiceoverUrl, onProgress) {
   // Step 1: Submit the transcription job (fast, <2s)
-  const submitRes = await base44.functions.invoke('submitTranscription', {
+  const submitRes = await api.functions.invoke('submitTranscription', {
     voiceover_url: voiceoverUrl,
   });
 
@@ -45,7 +45,7 @@ export async function transcribeVoiceover(voiceoverUrl, onProgress) {
 
     onProgress?.({ phase: 'processing', message: `Recognizing speech… (${pollCount * 3}s)`, pollCount });
 
-    const pollRes = await base44.functions.invoke('pollTranscription', {
+    const pollRes = await api.functions.invoke('pollTranscription', {
       transcript_id: transcriptId,
     });
 

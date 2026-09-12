@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -15,7 +15,7 @@ export default function SceneSfxEditor({ scene, onUpdate }) {
 
   const handleSuggest = async () => {
     setGenerating(true);
-    const result = await base44.integrations.Core.InvokeLLM({
+    const result = await api.integrations.Core.InvokeLLM({
       prompt: `You are an expert foley artist. Given this scene narration, suggest the single BEST minimal sound effect that would make this scene feel real and immersive.
 
 NARRATION: "${scene.narration_text}"
@@ -47,12 +47,12 @@ Return JSON: { "sfx": "description", "needed": true/false }`,
   const handleGenerateAudio = async () => {
     if (!sfx) return;
     setGeneratingAudio(true);
-    const res = await base44.functions.invoke('generateSoundEffect', {
+    const res = await api.functions.invoke('generateSoundEffect', {
       text: sfx,
       scene_id: scene.id,
     });
     if (res.data?.audio_url) {
-      await base44.entities.Scenes.update(scene.id, {
+      await api.entities.Scenes.update(scene.id, {
         sound_effect: sfx,
         sound_effect_url: res.data.audio_url,
         sfx_volume: volume,
@@ -63,7 +63,7 @@ Return JSON: { "sfx": "description", "needed": true/false }`,
   };
 
   const handleSave = async () => {
-    await base44.entities.Scenes.update(scene.id, {
+    await api.entities.Scenes.update(scene.id, {
       sound_effect: sfx,
       sfx_volume: volume,
     });

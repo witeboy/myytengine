@@ -1,5 +1,5 @@
 import React from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -43,7 +43,7 @@ export default function SleepPipeline() {
   const { data: project, refetch: refetchProject } = useQuery({
     queryKey: ['project', projectId],
     queryFn: async () => {
-      const list = await base44.entities.Projects.filter({ id: projectId });
+      const list = await api.entities.Projects.filter({ id: projectId });
       return list[0];
     },
     enabled: !!projectId,
@@ -52,7 +52,7 @@ export default function SleepPipeline() {
   const { data: batches = [], refetch: refetchBatches } = useQuery({
     queryKey: ['sleep-batches', projectId],
     queryFn: async () => {
-      const all = await base44.entities.ScriptBatches.filter({ project_id: projectId });
+      const all = await api.entities.ScriptBatches.filter({ project_id: projectId });
       return all.sort((a, b) => a.batch_number - b.batch_number);
     },
     enabled: !!projectId,
@@ -60,14 +60,14 @@ export default function SleepPipeline() {
 
   const { data: scripts = [], refetch: refetchScripts } = useQuery({
     queryKey: ['sleep-scripts', projectId],
-    queryFn: () => base44.entities.Scripts.filter({ project_id: projectId }),
+    queryFn: () => api.entities.Scripts.filter({ project_id: projectId }),
     enabled: !!projectId,
   });
 
   const { data: scenes = [], refetch: refetchScenes } = useQuery({
     queryKey: ['sleep-scenes', projectId],
     queryFn: async () => {
-      const all = await base44.entities.Scenes.filter({ project_id: projectId });
+      const all = await api.entities.Scenes.filter({ project_id: projectId });
       return all.sort((a, b) => a.scene_number - b.scene_number);
     },
     enabled: !!projectId,
@@ -87,7 +87,7 @@ export default function SleepPipeline() {
   // Check if music exists
   const { data: musicTracks = [] } = useQuery({
     queryKey: ['sleep-music', projectId],
-    queryFn: () => base44.entities.MusicTracks.filter({ project_id: projectId }),
+    queryFn: () => api.entities.MusicTracks.filter({ project_id: projectId }),
     enabled: !!projectId,
   });
   const hasMusicReady = musicTracks.some(t => t.is_selected && t.audio_url);

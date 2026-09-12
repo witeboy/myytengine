@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Loader2, Film, CheckCircle2, XCircle } from 'lucide-react';
 
@@ -26,7 +26,7 @@ export default function AutoBrollButton({ projectId, sceneCount, onComplete, pro
       let done = false;
 
       while (!done) {
-        const res = await base44.functions.invoke(fnName, {
+        const res = await api.functions.invoke(fnName, {
           project_id: projectId,
         });
         const data = res.data || res;

@@ -1,39 +1,63 @@
-**Welcome to your Base44 project** 
+# MyYTEngine
 
-**About**
+A faceless YouTube content engine: topic to script to scenes to images, voiceover,
+music and timeline export, with thumbnails and SEO packaging at the end.
 
-View and Edit  your app on [Base44.com](http://Base44.com) 
+Live at [myytengine.rcinc.app](https://myytengine.rcinc.app).
 
-This project contains everything you need to run your app locally.
-
-**Edit the code in your local development environment**
-
-Any change pushed to the repo will also be reflected in the Base44 Builder.
-
-**Prerequisites:** 
-
-1. Clone the repository using the project's Git URL 
-2. Navigate to the project directory
-3. Install dependencies: `npm install`
-4. Create an `.env.local` file and set the right environment variables
+## Layout
 
 ```
-VITE_BASE44_APP_ID=your_app_id
-VITE_BASE44_APP_BASE_URL=your_backend_url
-
-e.g.
-VITE_BASE44_APP_ID=cbef744a8545c389ef439ea6
-VITE_BASE44_APP_BASE_URL=https://my-to-do-list-81bfaad7.base44.app
+apps/web/       React + Vite SPA, deployed to Vercel
+workers/api/    Cloudflare Worker — the whole backend
+migration/      records of the migration off the original hosted platform
 ```
 
-Run the app: `npm run dev`
+| Concern | Where it lives |
+|---|---|
+| Application data | Cloudflare D1 (`myytengine`) |
+| Media and finished exports | Cloudflare R2, served from `media.radiantmemory.ca` |
+| Oversized columns | R2 cold storage, offloaded above 64 KB and rehydrated on read |
+| Identity | Neon Postgres — **auth tables only** |
+| Provider keys | AES-GCM encrypted in D1, entered per user in Settings |
 
-**Publish your changes**
+## Auth
 
-Open [Base44.com](http://Base44.com) and click on Publish.
+Self-hosted session auth, the same model as the other rcinc.app apps. An opaque
+random token lives in an httpOnly, SameSite=Lax cookie; only its SHA-256 hash is
+stored, so a database leak cannot be replayed as a login and revocation is
+instant. Two ways in: Google OAuth (authorization code with PKCE) and a one-time
+code emailed to the address.
 
-**Docs & Support**
+The SPA reaches the Worker same-origin through a Vercel rewrite, which is what
+lets the cookie travel with every API call.
 
-Documentation: [https://docs.base44.com/Integrations/Using-GitHub](https://docs.base44.com/Integrations/Using-GitHub)
+## Running locally
 
-Support: [https://app.base44.com/support](https://app.base44.com/support)
+```bash
+npm install
+npm run dev --workspace @myytengine/web
+```
+
+The dev server proxies `/api` to the deployed Worker, so local sessions behave
+the same as production. To run the Worker itself, `npm run dev --workspace
+@myytengine/api`.
+
+## Deploying
+
+Both halves deploy from `main`:
+
+- **Frontend** — Vercel builds on push.
+- **Worker** — Cloudflare Workers Builds runs from `workers/api`.
+
+Nothing needs deploying by hand. Worker secrets are set with
+`npx wrangler secret put <NAME>` from `workers/api`, never committed.
+
+## Tests
+
+```bash
+npm run typecheck --workspace @myytengine/api
+npm test --workspace @myytengine/api
+npm run lint --workspace @myytengine/web
+npm run build --workspace @myytengine/web
+```

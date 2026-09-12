@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -54,7 +54,7 @@ export default function PostProduction() {
   // ── Queries ──────────────────────────────────────────────────────
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
-    queryFn: async () => { const list = await base44.entities.Projects.filter({ id: projectId }); return list[0]; },
+    queryFn: async () => { const list = await api.entities.Projects.filter({ id: projectId }); return list[0]; },
     enabled: !!projectId,
   });
 
@@ -63,11 +63,11 @@ export default function PostProduction() {
     queryFn: async () => {
       // Try by script_id first
       if (project?.script_id) {
-        const list = await base44.entities.Scripts.filter({ id: project.script_id });
+        const list = await api.entities.Scripts.filter({ id: project.script_id });
         if (list[0]) return list[0];
       }
       // Fallback: find final_aggregated script by project_id
-      const allScripts = await base44.entities.Scripts.filter({ project_id: projectId });
+      const allScripts = await api.entities.Scripts.filter({ project_id: projectId });
       const final = allScripts.find(s => s.version === 'final_aggregated') || allScripts[0];
       return final || null;
     },
@@ -78,7 +78,7 @@ export default function PostProduction() {
   const { data: scenes = [] } = useQuery({
     queryKey: ['scenes-postprod', projectId],
     queryFn: async () => {
-      const all = await base44.entities.Scenes.filter({ project_id: projectId });
+      const all = await api.entities.Scenes.filter({ project_id: projectId });
       return all.filter(s => s.image_url && s.image_url.startsWith('http')).sort((a, b) => a.scene_number - b.scene_number);
     },
     enabled: !!projectId,
@@ -86,7 +86,7 @@ export default function PostProduction() {
 
   const { data: metadataList = [], refetch: refetchMeta } = useQuery({
     queryKey: ['upload-metadata', projectId],
-    queryFn: () => base44.entities.UploadMetadata.filter({ project_id: projectId }),
+    queryFn: () => api.entities.UploadMetadata.filter({ project_id: projectId }),
     enabled: !!projectId,
   });
 
@@ -163,7 +163,7 @@ export default function PostProduction() {
     if (!fullScript || summarizing) return;
     setSummarizing(true);
     try {
-      const result = await base44.integrations.Core.InvokeLLM({
+      const result = await api.integrations.Core.InvokeLLM({
         prompt: `Summarize the following video script in under 400 words. Focus on: the main story arc, key characters/people involved, emotional beats and turning points, visual themes and settings. This summary will be used to generate a YouTube thumbnail, so emphasize the most visually dramatic and emotionally compelling moments.\n\nSCRIPT:\n${fullScript.substring(0, 12000)}`,
         response_json_schema: {
           type: "object",
@@ -189,7 +189,7 @@ export default function PostProduction() {
     // ════════════════════════════════════════════════════════════════
     // PHASE 1: Generate titles, tags, hashtags (fast)
     // ════════════════════════════════════════════════════════════════
-    const res1 = await base44.functions.invoke('generateSeoTitlesDescriptions', { 
+    const res1 = await api.functions.invoke('generateSeoTitlesDescriptions', { 
       project_id: projectId 
     });
     
@@ -212,7 +212,7 @@ export default function PostProduction() {
     // PHASE 2: Generate descriptions (slower, but UI already updated)
     // ════════════════════════════════════════════════════════════════
     if (data1.needs_descriptions) {
-      const res2 = await base44.functions.invoke('generateSeoDescriptions', { 
+      const res2 = await api.functions.invoke('generateSeoDescriptions', { 
         project_id: projectId 
       });
       
@@ -240,12 +240,12 @@ export default function PostProduction() {
     setMarkingDone(true);
     try {
       // Mark project as published
-      await base44.entities.Projects.update(projectId, { status: 'published', current_step: 14 });
+      await api.entities.Projects.update(projectId, { status: 'published', current_step: 14 });
 
       // Also mark the channel topic as completed if linked
       if (project?.channel_topic_id) {
         try {
-          await base44.entities.ChannelTopics.update(project.channel_topic_id, { status: 'completed' });
+          await api.entities.ChannelTopics.update(project.channel_topic_id, { status: 'completed' });
         } catch (_) {}
       }
 

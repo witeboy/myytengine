@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import {
   ArrowLeft, X, Sparkles, Loader2, Download,
   RefreshCw, User, Mountain,
@@ -57,7 +57,7 @@ export default function ThumbnailBlend({ onBack, generatedThumbnailUrl, videoTit
 
   // Upload a file and get a blob URL (for preview) + the actual uploaded URL
   const uploadFile = async (file) => {
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
+    const { file_url } = await api.integrations.Core.UploadFile({ file });
     return file_url;
   };
 
@@ -91,7 +91,7 @@ export default function ThumbnailBlend({ onBack, generatedThumbnailUrl, videoTit
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise(r => setTimeout(r, 5000));
       try {
-        const res = await base44.functions.invoke('pollThumbnailBlend', { task_id: taskId, concept_id: conceptId });
+        const res = await api.functions.invoke('pollThumbnailBlend', { task_id: taskId, concept_id: conceptId });
         const data = res?.data ?? res;
         if (data?.completed) {
           if (data?.image_url) return { image_url: data.image_url };
@@ -113,7 +113,7 @@ export default function ThumbnailBlend({ onBack, generatedThumbnailUrl, videoTit
     setBlendPhase('Submitting blend request to AI33 SeedDream...');
 
     try {
-      const raw = await base44.functions.invoke('thumbnailBlend', {
+      const raw = await api.functions.invoke('thumbnailBlend', {
         reference_image_url: referenceUrl,
         face_images: faceImages,
         object_images: objectImages,

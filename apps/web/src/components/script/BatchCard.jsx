@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,7 @@ export default function BatchCard({ batch, onUpdate }) {
   const handleSave = async () => {
     setSaving(true);
     const wordCount = editContent.split(/\s+/).filter(w => w.length > 0).length;
-    await base44.entities.ScriptBatches.update(batch.id, {
+    await api.entities.ScriptBatches.update(batch.id, {
       content: editContent,
       word_count: wordCount,
     });

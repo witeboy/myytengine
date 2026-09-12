@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -52,7 +52,7 @@ export default function FlowRemake() {
   const { data: scenes = [], refetch: refetchScenes } = useQuery({
     queryKey: ['flow-scenes', currentProjectId],
     queryFn: async () => {
-      const all = await base44.entities.Scenes.filter({ project_id: currentProjectId });
+      const all = await api.entities.Scenes.filter({ project_id: currentProjectId });
       return all.sort((a, b) => a.scene_number - b.scene_number);
     },
     enabled: !!currentProjectId,
@@ -73,7 +73,7 @@ export default function FlowRemake() {
       }
 
       if (!pid) {
-        const project = await base44.entities.Projects.create({
+        const project = await api.entities.Projects.create({
           name: `_flow_${title}`,
           niche: category,
           visual_style: visualStyle,
@@ -85,7 +85,7 @@ export default function FlowRemake() {
         setCurrentProjectId(pid);
       }
 
-      const res = await base44.functions.invoke('generateProgressionPrompts', {
+      const res = await api.functions.invoke('generateProgressionPrompts', {
         project_id: pid,
         title,
         category,
@@ -131,7 +131,7 @@ export default function FlowRemake() {
       });
 
       try {
-        const res = await base44.functions.invoke('generateProgressionImage', {
+        const res = await api.functions.invoke('generateProgressionImage', {
           scene_id: scenes[i].id,
           reference_image_url: previousImageUrl,
         });
@@ -168,7 +168,7 @@ export default function FlowRemake() {
     const prev = sceneIdx > 0 ? scenes[sceneIdx - 1]?.image_url : null;
     setSceneErrors(prev2 => { const n = { ...prev2 }; delete n[scene.scene_number]; return n; });
     try {
-      await base44.functions.invoke('generateProgressionImage', {
+      await api.functions.invoke('generateProgressionImage', {
         scene_id: scene.id,
         reference_image_url: prev?.startsWith('http') ? prev : null,
       });
@@ -183,7 +183,7 @@ export default function FlowRemake() {
     setGeneratingVideos(true);
     setSceneErrors({});
 
-    const freshScenes = await base44.entities.Scenes.filter({ project_id: currentProjectId });
+    const freshScenes = await api.entities.Scenes.filter({ project_id: currentProjectId });
     const sorted = freshScenes.sort((a, b) => a.scene_number - b.scene_number);
     const transitions = sorted.length - 1;
 
@@ -208,7 +208,7 @@ export default function FlowRemake() {
     // wall time ≈ max(single transition) instead of sum.
     await Promise.all(pending.map(async (i) => {
       try {
-        await base44.functions.invoke('generateProgressionVideo', {
+        await api.functions.invoke('generateProgressionVideo', {
           start_scene_id: sorted[i].id,
           end_scene_id: sorted[i + 1].id,
           poll: true,
@@ -218,7 +218,7 @@ export default function FlowRemake() {
         console.warn(`✗ Transition ${i + 1}→${i + 2}:`, err.message);
       }
       completed += 1;
-      const fresh = await base44.entities.Scenes.filter({ project_id: currentProjectId });
+      const fresh = await api.entities.Scenes.filter({ project_id: currentProjectId });
       setVideoProgress({
         current: completed,
         total: transitions,
@@ -648,7 +648,7 @@ export default function FlowRemake() {
                 variant="outline"
                 className="border-green-300 text-green-700 hover:bg-green-50"
                 onClick={async () => {
-                  const freshScenes = await base44.entities.Scenes.filter({ project_id: currentProjectId });
+                  const freshScenes = await api.entities.Scenes.filter({ project_id: currentProjectId });
                   const sorted = freshScenes.sort((a, b) => a.scene_number - b.scene_number);
                   for (const scene of sorted) {
                     if (scene.image_url?.startsWith('http')) {

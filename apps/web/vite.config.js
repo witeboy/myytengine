@@ -17,7 +17,7 @@ export default defineConfig({
   },
   plugins: [react()],
   resolve: {
-    // The Base44 plugin used to provide this. `@/...` is used by every import in the app.
+    // The the original platform plugin used to provide this. `@/...` is used by every import in the app.
     alias: { '@': path.resolve(__dirname, './src') },
   },
 });

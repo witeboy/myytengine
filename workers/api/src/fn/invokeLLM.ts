@@ -1,9 +1,9 @@
-// Backend for `base44.integrations.Core.InvokeLLM`, which the client shim routes to
+// Backend for `the hosted InvokeLLM integration`, which the client shim routes to
 // POST /api/fn/invokeLLM. Used at 18 frontend sites (ViralTrendsPanel, PostProduction,
 // and others) plus `src/lib/invokeLLM.js`.
 //
 // All the behaviour lives in lib/ai.ts so the backend and frontend paths cannot drift.
-// Contract, unchanged from Base44: no schema -> string, schema -> parsed object.
+// Contract, unchanged from the original platform: no schema -> string, schema -> parsed object.
 
 import { invokeLLM as run } from '../lib/ai';
 import { badRequest } from '../lib/http';

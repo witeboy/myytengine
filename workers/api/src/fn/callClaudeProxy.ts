@@ -1,4 +1,4 @@
-// Ported from base44/functions/callClaudeProxy/entry.ts — HAND-WRITTEN.
+// Ported from the original hosted callClaudeProxy function — HAND-WRITTEN.
 //
 // Two unrelated jobs behind one name, both preserved:
 //   1. default        { system, prompt, max_tokens, model } -> { text }

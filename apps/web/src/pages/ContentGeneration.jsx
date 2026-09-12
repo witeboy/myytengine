@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -50,7 +50,7 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
     setFixType(type);
     setResult(null);
     try {
-      const resp = await base44.functions.invoke('fixScenePrompts', { project_id: projectId, fix_type: type });
+      const resp = await api.functions.invoke('fixScenePrompts', { project_id: projectId, fix_type: type });
       const data = resp.data || resp;
       setResult(data);
       await onComplete();
@@ -70,7 +70,7 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
     setFixType('reference');
     setResult(null);
     try {
-      await base44.entities.Projects.update(projectId, { reference_image_url: imageUrl });
+      await api.entities.Projects.update(projectId, { reference_image_url: imageUrl });
       setResult({ fixed: 1, total: 1, reference_locked: true });
       await onComplete();
     } catch (err) {
@@ -98,7 +98,7 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
         (s.status === 'prompts_ready' || s.status === 'image_generated')
       );
       const batchPayload = toClean.map(s => ({ scene_number: s.scene_number, image_prompt: s.image_prompt }));
-      const resp = await base44.functions.invoke('cleanScenePrompt', {
+      const resp = await api.functions.invoke('cleanScenePrompt', {
         prompts: batchPayload,
         visual_style: project?.visual_style || ''
       });
@@ -108,7 +108,7 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
       for (const item of cleaned) {
         const scene = toClean.find(s => s.scene_number === item.scene_number);
         if (scene && item.cleaned_prompt && item.cleaned_prompt !== scene.image_prompt) {
-          await base44.entities.Scenes.update(scene.id, { image_prompt: item.cleaned_prompt });
+          await api.entities.Scenes.update(scene.id, { image_prompt: item.cleaned_prompt });
           updated++;
         }
       }
@@ -244,11 +244,11 @@ function AudioAssetsPanel({ project }) {
     if (!projectId) return;
     (async () => {
       try {
-        const ps = await base44.entities.ProductionSettings?.filter({ project_id: projectId });
+        const ps = await api.entities.ProductionSettings?.filter({ project_id: projectId });
         if (ps?.length > 0) setProdSettings(ps[0]);
       } catch (_) {}
       try {
-        const tracks = await base44.entities.MusicTracks?.filter({ project_id: projectId });
+        const tracks = await api.entities.MusicTracks?.filter({ project_id: projectId });
         if (tracks?.length > 0) setMusicTracks(tracks);
       } catch (_) {}
     })();
@@ -336,7 +336,7 @@ function AudioAssetsPanel({ project }) {
 
     if (isCorsBocked(asset.url)) {
       try {
-        const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url: asset.url });
+        const proxyRes = await api.functions.invoke('proxyFetchAsset', { url: asset.url });
         const data = proxyRes.data || proxyRes;
         if (data.success && data.data) {
           const binary = atob(data.data);
@@ -368,7 +368,7 @@ function AudioAssetsPanel({ project }) {
     } catch (_) { console.log(`CORS blocked for ${asset.key} — using proxy`); }
 
     try {
-      const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url: asset.url });
+      const proxyRes = await api.functions.invoke('proxyFetchAsset', { url: asset.url });
       const data = proxyRes.data || proxyRes;
       if (data.success && data.data) {
         const binary = atob(data.data);
@@ -478,7 +478,7 @@ export default function ContentGeneration() {
   const { data: project, refetch: refetchProject } = useQuery({
     queryKey: ['project', projectId],
     queryFn: async () => {
-      const list = await base44.entities.Projects.filter({ id: projectId });
+      const list = await api.entities.Projects.filter({ id: projectId });
       return list[0];
     },
     enabled: !!projectId,
@@ -487,7 +487,7 @@ export default function ContentGeneration() {
   const { data: scenes = [], refetch: refetchScenes } = useQuery({
     queryKey: ['scenes', projectId],
     queryFn: async () => {
-      const all = await base44.entities.Scenes.filter({ project_id: projectId });
+      const all = await api.entities.Scenes.filter({ project_id: projectId });
       return all.sort((a, b) => a.scene_number - b.scene_number);
     },
     enabled: !!projectId,
@@ -498,7 +498,7 @@ export default function ContentGeneration() {
   // ── Helpers ────────────────────────────────────────────────────
   const invokeWithTimeout = async (fnName, payload) => {
     try {
-      await base44.functions.invoke(fnName, payload);
+      await api.functions.invoke(fnName, payload);
     } catch (err) {
       const status = err?.response?.status || err?.status;
       if (status === 504) {
@@ -534,11 +534,11 @@ export default function ContentGeneration() {
     while (!promptsDone && attempts < MAX_ATTEMPTS) {
       attempts++;
       try {
-        const prResult = await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
+        const prResult = await api.functions.invoke('generateScenePrompts', { project_id: projectId });
         const prData = prResult?.data || prResult;
         promptsDone = prData?.done === true;
 
-        const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+        const freshScenes = await api.entities.Scenes.filter({ project_id: projectId });
         queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
 
         const ready = freshScenes.filter(s => s.status === 'prompts_ready');
@@ -555,7 +555,7 @@ export default function ContentGeneration() {
           console.log(`generateScenePrompts error ${status} on attempt ${attempts}, retrying in 8s...`);
           await new Promise(r => setTimeout(r, 8000));
 
-          const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+          const freshScenes = await api.entities.Scenes.filter({ project_id: projectId });
           queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
           const ready = freshScenes.filter(s => s.status === 'prompts_ready');
           notify(`Recovering... ${ready.length}/${freshScenes.length} prompts ready`);
@@ -606,7 +606,7 @@ export default function ContentGeneration() {
       // Keep polling until nothing is pending or we hit the ceiling
       while (rounds < MAX_ROUNDS) {
         rounds++;
-        const resp = await base44.functions.invoke('pollSceneImage', { project_id: projectId });
+        const resp = await api.functions.invoke('pollSceneImage', { project_id: projectId });
         const data = resp?.data || resp;
         totalCompleted += data.completed || 0;
         totalFailed    += data.failed    || 0;
@@ -638,7 +638,7 @@ export default function ContentGeneration() {
     setImporting(true);
 
     try {
-      const scriptsList = await base44.entities.Scripts.filter({ project_id: projectId });
+      const scriptsList = await api.entities.Scripts.filter({ project_id: projectId });
       const script = scriptsList.find(s => s.version === 'final_aggregated');
       if (script?.full_script) {
         const wc = script.full_script.split(/\s+/).filter(w => w.length > 0).length;
@@ -656,7 +656,7 @@ export default function ContentGeneration() {
       let channel = null;
       if (project?.channel_id) {
         try {
-          const channels = await base44.entities.Channels?.filter({ id: project.channel_id });
+          const channels = await api.entities.Channels?.filter({ id: project.channel_id });
           channel = channels?.[0] || null;
         } catch (_) {}
       }
@@ -667,7 +667,7 @@ export default function ContentGeneration() {
       // AND refresh the local project cache so downstream rendering sees the new mode.
       if (inferred && resolvedMode !== 'standard' && project?.project_mode !== resolvedMode) {
         try {
-          await base44.entities.Projects.update(projectId, { project_mode: resolvedMode });
+          await api.entities.Projects.update(projectId, { project_mode: resolvedMode });
           await refetchProject();
           console.log(`[Pipeline] Self-healed project_mode → ${resolvedMode}`);
         } catch (e) {
@@ -702,7 +702,7 @@ export default function ContentGeneration() {
         // ── SLEEP: lightweight ambient breakdown (6-12 images) ──
         setImportProgress('Designing ambient sleep visuals...');
         try {
-          await base44.functions.invoke('sleepSceneBreakdown', { project_id: projectId });
+          await api.functions.invoke('sleepSceneBreakdown', { project_id: projectId });
         } catch (err) {
           if (err?.response?.status === 504) {
             await new Promise(r => setTimeout(r, 8000));
@@ -710,7 +710,7 @@ export default function ContentGeneration() {
             throw err;
           }
         }
-        const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+        const freshScenes = await api.entities.Scenes.filter({ project_id: projectId });
         queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
         setTotalExpectedScenes(freshScenes.length);
         setImportProgress(`Created ${freshScenes.length} ambient image definitions`);
@@ -719,7 +719,7 @@ export default function ContentGeneration() {
         // ── SHORTS: rapid-cut 40-scene breakdown ──
         setImportProgress('Breaking Shorts script into 40 rapid-cut scenes...');
         try {
-          const result = await base44.functions.invoke('shortsSceneBreakdown', { project_id: projectId });
+          const result = await api.functions.invoke('shortsSceneBreakdown', { project_id: projectId });
           const data = result?.data || result;
           if (data?.error) throw new Error(data.error);
         } catch (err) {
@@ -732,18 +732,18 @@ export default function ContentGeneration() {
           }
         }
 
-        let freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+        let freshScenes = await api.entities.Scenes.filter({ project_id: projectId });
 
         if (freshScenes.length === 0) {
           setImportProgress('No scenes found yet — retrying breakdown...');
           try {
-            await base44.functions.invoke('shortsSceneBreakdown', { project_id: projectId });
+            await api.functions.invoke('shortsSceneBreakdown', { project_id: projectId });
           } catch (retryErr) {
             const status = retryErr?.response?.status || retryErr?.status;
             if (status !== 502 && status !== 504) throw retryErr;
             await new Promise(r => setTimeout(r, 12000));
           }
-          freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+          freshScenes = await api.entities.Scenes.filter({ project_id: projectId });
         }
 
         if (freshScenes.length === 0) {
@@ -772,7 +772,7 @@ export default function ContentGeneration() {
         while (!breakdownDone && attempts < MAX_ATTEMPTS) {
           attempts++;
           try {
-            const bdResult = await base44.functions.invoke('longViralSceneBreakdown', {
+            const bdResult = await api.functions.invoke('longViralSceneBreakdown', {
               project_id: projectId,
               start_batch: nextBatch,
             });
@@ -783,7 +783,7 @@ export default function ContentGeneration() {
             nextBatch = bdData.next_batch ?? nextBatch;
             totalBatches = bdData.total_batches || totalBatches;
 
-            const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+            const freshScenes = await api.entities.Scenes.filter({ project_id: projectId });
             queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
             setTotalExpectedScenes(freshScenes.length);
             setImportProgress(
@@ -803,7 +803,7 @@ export default function ContentGeneration() {
           if (!breakdownDone) await new Promise(r => setTimeout(r, 1500));
         }
 
-        const finalScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+        const finalScenes = await api.entities.Scenes.filter({ project_id: projectId });
         if (finalScenes.length === 0) {
           throw new Error('Long Viral scene breakdown failed. Please try again.');
         }
@@ -821,13 +821,13 @@ export default function ContentGeneration() {
         // Either is fine — explainerSceneBreakdown reads both.
         let hasResearch = false;
         try {
-          const proj = await base44.entities.Projects.filter({ id: projectId });
+          const proj = await api.entities.Projects.filter({ id: projectId });
           if (proj[0]?.research_notes) {
             const parsed = JSON.parse(proj[0].research_notes);
             if (parsed.facts?.length || parsed.sections?.length) hasResearch = true;
           }
           if (!hasResearch) {
-            const ps = await base44.entities.ProductionSettings?.filter({ project_id: projectId });
+            const ps = await api.entities.ProductionSettings?.filter({ project_id: projectId });
             if (ps?.[0]?.research_notes) {
               const parsed = JSON.parse(ps[0].research_notes);
               if (parsed.sections?.length || parsed.facts?.length) hasResearch = true;
@@ -852,7 +852,7 @@ export default function ContentGeneration() {
         while (!breakdownDone && attempts < MAX_ATTEMPTS) {
           attempts++;
           try {
-            const bdResult = await base44.functions.invoke('explainerSceneBreakdown', {
+            const bdResult = await api.functions.invoke('explainerSceneBreakdown', {
               project_id: projectId,
               start_section: nextSection,
             });
@@ -863,7 +863,7 @@ export default function ContentGeneration() {
             nextSection = bdData.next_section ?? nextSection;
             totalSections = bdData.total_sections || totalSections;
 
-            const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+            const freshScenes = await api.entities.Scenes.filter({ project_id: projectId });
             queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
             setTotalExpectedScenes(Math.max(freshScenes.length, totalSections * 5));
             setImportProgress(
@@ -890,7 +890,7 @@ export default function ContentGeneration() {
       } else {
         // ── STANDARD: full cinematic multi-batch breakdown ──
         try {
-          await base44.functions.invoke('extractCharacterDNA', { project_id: projectId });
+          await api.functions.invoke('extractCharacterDNA', { project_id: projectId });
           console.log('🧬 Character DNA extracted');
         } catch (err) {
           console.warn('Character DNA extraction failed (non-fatal):', err.message);
@@ -908,7 +908,7 @@ export default function ContentGeneration() {
               await new Promise(r => setTimeout(r, delay));
             }
 
-            const bdResult = await base44.functions.invoke('generateSceneBreakdown', {
+            const bdResult = await api.functions.invoke('generateSceneBreakdown', {
               project_id: projectId,
               batch_index: nextBatch
             });
@@ -916,7 +916,7 @@ export default function ContentGeneration() {
             breakdownDone = bdData.done === true;
             nextBatch = bdData.next_batch ?? (nextBatch + 1);
 
-            const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+            const freshScenes = await api.entities.Scenes.filter({ project_id: projectId });
             queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
 
             const target = bdData.total_target || freshScenes.length;
@@ -937,7 +937,7 @@ export default function ContentGeneration() {
             }
             if (status === 504) {
               await new Promise(r => setTimeout(r, 8000));
-              const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+              const freshScenes = await api.entities.Scenes.filter({ project_id: projectId });
               queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
               setImportProgress(`Recovering from timeout... ${freshScenes.length} scenes so far`);
               continue;
@@ -994,7 +994,7 @@ export default function ContentGeneration() {
       }
     }
 
-    const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+    const freshScenes = await api.entities.Scenes.filter({ project_id: projectId });
     const readyScenes = freshScenes
       .filter(s => s.status === 'prompts_ready' || s.status === 'image_failed' || (!s.image_url && !s.image_prompt?.startsWith('DIRECTOR_NOTES:')))
       .sort((a, b) => a.scene_number - b.scene_number);
@@ -1004,7 +1004,7 @@ export default function ContentGeneration() {
 
     setImageProgress({ current: 0, total, sceneName: `Submitting ${total} scenes...` });
 
-    const freshProject = (await base44.entities.Projects.filter({ id: projectId }))?.[0];
+    const freshProject = (await api.entities.Projects.filter({ id: projectId }))?.[0];
     let submitCount = 0;
     const SUBMIT_BATCH = 8;
 
@@ -1020,7 +1020,7 @@ export default function ContentGeneration() {
       });
 
       try {
-        const response = await base44.functions.invoke('generateSceneImage', {
+        const response = await api.functions.invoke('generateSceneImage', {
           scene_ids: batch.map(s => s.id),
           preferred_provider: freshProject?.image_provider || 'auto'
         });
@@ -1052,7 +1052,7 @@ export default function ContentGeneration() {
       pollCount++;
 
       try {
-        const pollResponse = await base44.functions.invoke('pollSceneImage', { project_id: projectId });
+        const pollResponse = await api.functions.invoke('pollSceneImage', { project_id: projectId });
         const pollData = pollResponse.data || pollResponse;
 
         const done = pollData.completed || 0;
@@ -1084,18 +1084,18 @@ export default function ContentGeneration() {
 
     if (lastFailed > 0 && !pollAbortRef.current) {
       setImageProgress({ current: lastCompleted, total, sceneName: `Retrying ${lastFailed} failed scenes...` });
-      const retryScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+      const retryScenes = await api.entities.Scenes.filter({ project_id: projectId });
       const stillFailed = retryScenes.filter(s => s.status === 'image_failed').sort((a, b) => a.scene_number - b.scene_number);
 
       for (const scene of stillFailed) {
         if (pollAbortRef.current) break;
         setImageProgress({ current: lastCompleted, total, sceneName: `Retrying Scene ${scene.scene_number}...` });
         try {
-          await base44.functions.invoke('generateSceneImage', { scene_id: scene.id, preferred_provider: freshProject?.image_provider || 'auto' });
+          await api.functions.invoke('generateSceneImage', { scene_id: scene.id, preferred_provider: freshProject?.image_provider || 'auto' });
           for (let i = 0; i < 12; i++) {
             await new Promise(r => setTimeout(r, 5000));
             try {
-              const pollRes = await base44.functions.invoke('pollSceneImage', { scene_id: scene.id });
+              const pollRes = await api.functions.invoke('pollSceneImage', { scene_id: scene.id });
               const pollData = pollRes.data || pollRes;
               const result = pollData.results?.[0];
               if (result?.status === 'done') { lastCompleted++; lastFailed--; break; }
@@ -1142,7 +1142,7 @@ export default function ContentGeneration() {
       setVideoProgress(prev => ({ ...prev, current: i + 1, sceneName: `Submitting Scene ${scene.scene_number}...`, phase: 'submitting', sceneStatuses: { ...prev.sceneStatuses, [scene.id]: 'submitting' } }));
 
       try {
-        const response = await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
+        const response = await api.functions.invoke('generateSceneVideo', { scene_id: scene.id });
         const result = response.data || response;
         pendingPolls.push({ scene_id: scene.id, task_id: result.task_id, scene_number: scene.scene_number });
         setVideoProgress(prev => ({ ...prev, sceneStatuses: { ...prev.sceneStatuses, [scene.id]: 'polling' } }));
@@ -1167,7 +1167,7 @@ export default function ContentGeneration() {
         for (const item of remaining) {
           if (pollAbortRef.current) break;
           try {
-            const pollResponse = await base44.functions.invoke('pollSceneVideo', { scene_id: item.scene_id });
+            const pollResponse = await api.functions.invoke('pollSceneVideo', { scene_id: item.scene_id });
             const pollResult = pollResponse.data || pollResponse;
             if (pollResult.status === 'COMPLETED') {
               setVideoProgress(prev => ({ ...prev, sceneStatuses: { ...prev.sceneStatuses, [item.scene_id]: 'done' } }));
@@ -1219,7 +1219,7 @@ export default function ContentGeneration() {
       (s.status === 'prompts_ready' || s.status === 'image_generated')
     );
     for (const scene of enhanceable) {
-      try { await base44.functions.invoke('enhanceScenePrompts', { scene_id: scene.id, enhance_type: 'both' }); }
+      try { await api.functions.invoke('enhanceScenePrompts', { scene_id: scene.id, enhance_type: 'both' }); }
       catch (err) { console.warn(`Scene ${scene.scene_number} enhance failed:`, err.message); }
       await refetchScenes();
     }
@@ -1262,7 +1262,7 @@ export default function ContentGeneration() {
   };
 
   const proxyFetch = async (url) => {
-    const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url });
+    const proxyRes = await api.functions.invoke('proxyFetchAsset', { url });
     const data = proxyRes.data || proxyRes;
     if (data.success && data.file_url) {
       const r2Res = await fetch(data.file_url, { mode: 'cors' });
@@ -1367,7 +1367,7 @@ export default function ContentGeneration() {
 
       // Also pull from ProductionSettings entity
       try {
-        const ps = await base44.entities.ProductionSettings?.filter({ project_id: projectId });
+        const ps = await api.entities.ProductionSettings?.filter({ project_id: projectId });
         if (ps?.length > 0) {
           const prodSettings = ps[0];
           for (const [field, value] of Object.entries(prodSettings)) {
@@ -1381,7 +1381,7 @@ export default function ContentGeneration() {
       } catch (e) { console.warn('Could not fetch ProductionSettings for export:', e.message); }
 
       try {
-        const mt = await base44.entities.MusicTracks?.filter({ project_id: projectId });
+        const mt = await api.entities.MusicTracks?.filter({ project_id: projectId });
         if (mt?.length > 0) {
           mt.forEach((track, i) => {
             if (track.audio_url && track.audio_url.startsWith('http') && !audioAssets.find(a => a.url === track.audio_url)) {
@@ -1437,7 +1437,7 @@ export default function ContentGeneration() {
 
   const { data: scripts = [] } = useQuery({
     queryKey: ['scripts', projectId],
-    queryFn: () => base44.entities.Scripts.filter({ project_id: projectId }),
+    queryFn: () => api.entities.Scripts.filter({ project_id: projectId }),
     enabled: !!projectId,
   });
   const latestScript = scripts.find(s => s.version === 'final_aggregated') || null;
@@ -1510,7 +1510,7 @@ export default function ContentGeneration() {
               const payload = { project_mode: m === 'standard' ? '' : m };
               if (m === 'explainer') payload.explainer_arc = arc;
               if (m === 'youtube_shorts') payload.orientation = 'portrait';
-              await base44.entities.Projects.update(projectId, payload);
+              await api.entities.Projects.update(projectId, payload);
               await refetchProject();
             }}
           >
@@ -1571,7 +1571,7 @@ export default function ContentGeneration() {
           <div className="bg-white p-5 rounded-lg shadow-sm border mb-6">
             <OrientationSelector
               selectedOrientation={project.orientation || 'landscape'}
-              onSelect={async (orientation) => { await base44.entities.Projects.update(projectId, { orientation }); refetchProject(); }}
+              onSelect={async (orientation) => { await api.entities.Projects.update(projectId, { orientation }); refetchProject(); }}
             />
           </div>
         )}
@@ -1595,11 +1595,11 @@ export default function ContentGeneration() {
             )}
             <VisualStyleSelector
               selectedStyle={project.visual_style}
-              onSelect={async (style) => { await base44.entities.Projects.update(projectId, { visual_style: style }); refetchProject(); }}
+              onSelect={async (style) => { await api.entities.Projects.update(projectId, { visual_style: style }); refetchProject(); }}
             />
             <ImageProviderSelector
               selected={project.image_provider || 'auto'}
-              onSelect={async (provider) => { await base44.entities.Projects.update(projectId, { image_provider: provider }); refetchProject(); }}
+              onSelect={async (provider) => { await api.entities.Projects.update(projectId, { image_provider: provider }); refetchProject(); }}
             />
           </div>
         )}

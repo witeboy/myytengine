@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -56,10 +56,10 @@ function VoicePanel({ title, icon, color, badgeText, voices, loadingVoices, tabs
     setGenerating(true);
     pollRef.current = setInterval(async () => {
       try {
-        const response = await base44.functions.invoke('pollVoiceover', { project_id: project.id });
+        const response = await api.functions.invoke('pollVoiceover', { project_id: project.id });
         const data = response.data;
         if (data?.status === 'ready' && data?.voiceover_url) {
-          const records = await base44.entities.ProductionSettings.filter({ project_id: project.id });
+          const records = await api.entities.ProductionSettings.filter({ project_id: project.id });
           if (records[0]) setSettings({ ...records[0], voiceover_status: 'completed', voiceover_url: data.voiceover_url });
           setGenerating(false); clearInterval(pollRef.current); pollRef.current = null; onUpdate?.();
         } else if (data?.status === 'failed') {
@@ -80,11 +80,11 @@ function VoicePanel({ title, icon, color, badgeText, voices, loadingVoices, tabs
     setGenerating(true); setError('');
     let res;
     try {
-      res = await base44.functions.invoke('generateVoiceover', { project_id: project.id, voice_id: selectedVoice, voice_category: selectedVoiceData?.category, provider });
+      res = await api.functions.invoke('generateVoiceover', { project_id: project.id, voice_id: selectedVoice, voice_category: selectedVoiceData?.category, provider });
     } catch (err) { setError(err?.response?.data?.error || err.message); setGenerating(false); return; }
     if (res?.data?.error) { setError(res.data.error); setGenerating(false); return; }
     if (res.data?.instant && res.data?.voiceover_url) {
-      const sr = await base44.entities.ProductionSettings.filter({ project_id: project.id });
+      const sr = await api.entities.ProductionSettings.filter({ project_id: project.id });
       if (sr[0]) setSettings({ ...sr[0], voiceover_status: 'completed', voiceover_url: res.data.voiceover_url });
       setGenerating(false); onUpdate?.(); return;
     }
@@ -98,7 +98,7 @@ function VoicePanel({ title, icon, color, badgeText, voices, loadingVoices, tabs
     if (!url) {
       setLoadingPreview(voice.voice_id);
       try {
-        const res = await base44.functions.invoke('previewVoice', { voice_id: voice.voice_id, provider });
+        const res = await api.functions.invoke('previewVoice', { voice_id: voice.voice_id, provider });
         if (res.data?.preview_url) { url = res.data.preview_url; setPreviewCache(prev => ({ ...prev, [voice.voice_id]: url })); }
         else { setLoadingPreview(null); return; }
       } catch (err) { console.warn('Preview failed:', err.message); setLoadingPreview(null); return; }
@@ -241,7 +241,7 @@ function UploadVoiceoverPanel({ project, onUpdate, settings, setSettings }) {
     if (!file || !project?.id) return;
     setUploading(true); setError(''); setSaved(false);
     try {
-      const uploaded = await base44.integrations.Core.UploadFile({ file });
+      const uploaded = await api.integrations.Core.UploadFile({ file });
       const voiceoverUrl = uploaded?.file_url;
       if (!voiceoverUrl) throw new Error('Upload returned no file URL.');
 
@@ -256,9 +256,9 @@ function UploadVoiceoverPanel({ project, onUpdate, settings, setSettings }) {
         voiceover_completed_chunks: 0,
       };
       const savedSettings = settings?.id
-        ? await base44.entities.ProductionSettings.update(settings.id, payload)
-        : await base44.entities.ProductionSettings.create(payload);
-      await base44.entities.Projects.update(project.id, { voiceover_url: voiceoverUrl });
+        ? await api.entities.ProductionSettings.update(settings.id, payload)
+        : await api.entities.ProductionSettings.create(payload);
+      await api.entities.Projects.update(project.id, { voiceover_url: voiceoverUrl });
       setSettings(savedSettings || { ...settings, ...payload });
       setSaved(true);
       onUpdate?.();
@@ -333,14 +333,14 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
 
   useEffect(() => {
     if (!project?.id) return;
-    base44.entities.ProductionSettings.filter({ project_id: project.id }).then(res => { if (res.length > 0) setSettings(res[0]); });
+    api.entities.ProductionSettings.filter({ project_id: project.id }).then(res => { if (res.length > 0) setSettings(res[0]); });
 
     setLoadingAi33(true);
-    base44.functions.invoke('listVoicesByProvider', { source: 'ai33' })
+    api.functions.invoke('listVoicesByProvider', { source: 'ai33' })
       .then(res => setAi33Voices(res.data?.voices || []))
       .catch(err => {
         console.warn('AI33 voices failed:', err.message);
-        base44.functions.invoke('listVoices', {}).then(res => setAi33Voices(res.data?.voices || [])).catch(() => setAi33Error('AI33 voices unavailable.'));
+        api.functions.invoke('listVoices', {}).then(res => setAi33Voices(res.data?.voices || [])).catch(() => setAi33Error('AI33 voices unavailable.'));
       })
       .finally(() => setLoadingAi33(false));
   }, [project?.id]);

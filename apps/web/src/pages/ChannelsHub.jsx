@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,7 @@ export default function ChannelsHub() {
 
   const { data: channels = [], isLoading } = useQuery({
     queryKey: ['channels'],
-    queryFn: () => base44.entities.Channels.filter({ status: 'active' }, '-created_date'),
+    queryFn: () => api.entities.Channels.filter({ status: 'active' }, '-created_date'),
   });
 
   return (

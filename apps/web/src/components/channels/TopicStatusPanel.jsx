@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { X, Play, Clock, ChevronDown, ChevronUp, Package, RotateCcw, Globe, Zap, Loader2 } from 'lucide-react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 
 import { ExpandableAssets } from './TopicAssetsPanel';
 import EditableTopicTitle from './EditableTopicTitle';
@@ -31,7 +31,7 @@ export default function TopicStatusPanel({ title, icon: Icon, topics, onClose, o
       if (withProject.length === 0) return;
       const results = {};
       for (const t of withProject) {
-        const projects = await base44.entities.Projects.filter({ id: t.project_id });
+        const projects = await api.entities.Projects.filter({ id: t.project_id });
         results[t.id] = projects[0] || null;
       }
       setProjectData(results);
@@ -42,16 +42,16 @@ export default function TopicStatusPanel({ title, icon: Icon, topics, onClose, o
   const handleRestart = async (topic) => {
     setActionLoading(topic.id);
     if (topic.project_id) {
-      await base44.entities.Projects.update(topic.project_id, { archived: true });
+      await api.entities.Projects.update(topic.project_id, { archived: true });
     }
-    await base44.entities.ChannelTopics.update(topic.id, { status: 'scheduled', project_id: '' });
+    await api.entities.ChannelTopics.update(topic.id, { status: 'scheduled', project_id: '' });
     setActionLoading(null);
     onTopicUpdated?.();
   };
 
   const handleMarkPublished = async (topic) => {
     setActionLoading(topic.id);
-    await base44.entities.ChannelTopics.update(topic.id, { status: 'published' });
+    await api.entities.ChannelTopics.update(topic.id, { status: 'published' });
     setActionLoading(null);
     onTopicUpdated?.();
   };

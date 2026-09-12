@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -20,7 +20,7 @@ export default function ScriptEditor({ script, onSaved }) {
     setSaving(true);
     const wordCount = content.split(/\s+/).filter(w => w.length > 0).length;
 
-    await base44.entities.Scripts.update(script.id, {
+    await api.entities.Scripts.update(script.id, {
       full_script: content,
       word_count: wordCount,
       estimated_duration_sec: Math.round((wordCount / 150) * 60),

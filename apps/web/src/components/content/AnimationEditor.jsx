@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Slider } from '@/components/ui/slider';
@@ -61,7 +61,7 @@ export default function AnimationEditor({ scene, onSave }) {
   const handleSave = async () => {
     setSaving(true);
     const fullPrompt = buildPrompt();
-    await base44.entities.Scenes.update(scene.id, {
+    await api.entities.Scenes.update(scene.id, {
       camera_movement: camera,
       animation_speed: speed,
       visual_effects: JSON.stringify(effects),

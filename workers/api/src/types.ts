@@ -74,5 +74,5 @@ export interface Ctx {
   waitUntil(p: Promise<unknown>): void;
 }
 
-/** A ported Base44 function. Return value is wrapped by the router as `{ data }`. */
+/** A ported the original platform function. Return value is wrapped by the router as `{ data }`. */
 export type FnHandler = (body: any, ctx: Ctx) => Promise<unknown>;

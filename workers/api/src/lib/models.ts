@@ -2,7 +2,7 @@
 //
 // WHY THIS IS NOT OPTIONAL
 // ------------------------
-// The Base44 code hardcodes Google/Anthropic/OpenAI model ids from its own era. Almost
+// The the original platform code hardcodes Google/Anthropic/OpenAI model ids from its own era. Almost
 // none of them exist in CheaperInference's catalogue, and the mismatches are silent
 // 404s at runtime, not build errors. Measured across the ported functions:
 //

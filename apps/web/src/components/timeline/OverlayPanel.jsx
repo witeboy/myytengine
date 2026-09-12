@@ -3,7 +3,7 @@
  * to the secondary overlay track above the main timeline.
  */
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Smile, Film, Plus, Trash2, Sticker, Image, Upload, Loader2, X } from 'lucide-react';
@@ -32,7 +32,7 @@ export default function OverlayPanel({ overlayClips, onAddOverlay, onRemoveOverl
   const { data: uploadedAssets = [] } = useQuery({
     queryKey: ['media-assets-overlay', projectId],
     queryFn: async () => {
-      const all = await base44.entities.MediaAssets.filter({ project_id: projectId, file_type: 'image', category: 'overlay' });
+      const all = await api.entities.MediaAssets.filter({ project_id: projectId, file_type: 'image', category: 'overlay' });
       return all.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
     },
     enabled: !!projectId,
@@ -46,8 +46,8 @@ export default function OverlayPanel({ overlayClips, onAddOverlay, onRemoveOverl
       const file = e.target.files?.[0];
       if (!file) return;
       setIsUploading(true);
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
-      await base44.entities.MediaAssets.create({
+      const { file_url } = await api.integrations.Core.UploadFile({ file });
+      await api.entities.MediaAssets.create({
         project_id: projectId,
         file_url,
         file_type: 'image',
@@ -80,7 +80,7 @@ export default function OverlayPanel({ overlayClips, onAddOverlay, onRemoveOverl
   };
 
   const handleDeleteAsset = async (assetId) => {
-    await base44.entities.MediaAssets.delete(assetId);
+    await api.entities.MediaAssets.delete(assetId);
     queryClient.invalidateQueries({ queryKey: ['media-assets-overlay', projectId] });
   };
 

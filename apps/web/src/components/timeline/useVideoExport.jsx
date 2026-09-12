@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 
 const QUALITY_PRESETS = {
   '1080p': { width: 1920, height: 1080, bitrate: 6000000 },
@@ -296,7 +296,7 @@ async function fetchAsBlob(url) {
 
   console.log('[Export] Proxying ' + url.substring(0, 70) + '...');
   try {
-    var res = await base44.functions.invoke('proxyFetchAsset', { url: url });
+    var res = await api.functions.invoke('proxyFetchAsset', { url: url });
     var pd = res && res.data ? res.data : res;
 
     if (pd && pd.success && pd.data) {
@@ -316,7 +316,7 @@ async function fetchAsBlob(url) {
       // Re-proxy it server-side rather than fetching from the browser.
       console.log('[Export] file_url returned — re-proxying server-side: ' + pd.file_url.substring(0, 60));
       try {
-        var res2 = await base44.functions.invoke('selectHook', { action: 'proxyAsset', url: pd.file_url });
+        var res2 = await api.functions.invoke('selectHook', { action: 'proxyAsset', url: pd.file_url });
         var pd2 = res2 && res2.data ? res2.data : res2;
         if (pd2 && pd2.success && pd2.data) {
           var binary2 = atob(pd2.data);

@@ -1,8 +1,8 @@
-// Registry of ported Base44 functions.
+// Registry of ported the original platform functions.
 //
 // CODEX: as you port each function, add one file under src/fn/<name>.ts with a
 // default-exported handler, import it here, and add it to FUNCTIONS. The key MUST be
-// the original Base44 function name — the frontend calls it by that name and nothing
+// the original platform function name — the frontend calls it by that name and nothing
 // else resolves paths any more (the old KNOWN_FLAT / 404-retry hack is gone).
 
 import type { FnHandler } from '../types';

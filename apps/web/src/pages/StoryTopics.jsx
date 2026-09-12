@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,7 @@ export default function StoryTopics() {
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
     queryFn: async () => {
-      const list = await base44.entities.Projects.filter({ id: projectId });
+      const list = await api.entities.Projects.filter({ id: projectId });
       return list[0];
     },
     enabled: !!projectId,
@@ -33,7 +33,7 @@ export default function StoryTopics() {
   const { data: topics = [], isLoading, refetch: refetchTopics } = useQuery({
     queryKey: ['topics', projectId],
     queryFn: async () => {
-      const all = await base44.entities.Topics.filter({ project_id: projectId });
+      const all = await api.entities.Topics.filter({ project_id: projectId });
       return all.sort((a, b) => a.rank - b.rank);
     },
     enabled: !!projectId,
@@ -46,8 +46,8 @@ export default function StoryTopics() {
 
   const handleSelect = async (topic) => {
     setSelecting(topic.id);
-    await base44.entities.Topics.update(topic.id, { is_selected: true });
-    await base44.entities.Projects.update(projectId, {
+    await api.entities.Topics.update(topic.id, { is_selected: true });
+    await api.entities.Projects.update(projectId, {
       selected_topic_id: topic.id,
       status: 'topic_selected',
       current_step: 1,
@@ -63,12 +63,12 @@ export default function StoryTopics() {
 
   const handleSaveEdit = async () => {
     setSaving(true);
-    await base44.entities.Topics.update(selectedTopic.id, {
+    await api.entities.Topics.update(selectedTopic.id, {
       title: editTitle,
       description: editDescription,
     });
     // Also update project name to match
-    await base44.entities.Projects.update(projectId, { name: editTitle });
+    await api.entities.Projects.update(projectId, { name: editTitle });
     await refetchTopics();
     queryClient.invalidateQueries({ queryKey: ['project', projectId] });
     setEditing(false);

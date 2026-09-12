@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Copy, Loader2, Trash2 } from 'lucide-react';
 
@@ -23,7 +23,7 @@ export default function DedupButton({ projectId, sceneCount = 0, onComplete }) {
     setPreview(null);
 
     try {
-      const res = await base44.functions.invoke('dedupScenes', {
+      const res = await api.functions.invoke('dedupScenes', {
         project_id: projectId,
         dry_run: true,
       });
@@ -50,7 +50,7 @@ export default function DedupButton({ projectId, sceneCount = 0, onComplete }) {
     setPhase('removing');
 
     try {
-      const res = await base44.functions.invoke('dedupScenes', {
+      const res = await api.functions.invoke('dedupScenes', {
         project_id: projectId,
         dry_run: false,
       });

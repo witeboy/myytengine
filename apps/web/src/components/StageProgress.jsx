@@ -2,7 +2,7 @@ import React from 'react';
 import { BookOpen, Image, Film, Home, Megaphone, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
 
@@ -14,7 +14,7 @@ export default function StageProgress({ currentStage = 1, projectStatus }) {
   const { data: project } = useQuery({
     queryKey: ['project-nav', projectId],
     queryFn: async () => {
-      const list = await base44.entities.Projects.filter({ id: projectId });
+      const list = await api.entities.Projects.filter({ id: projectId });
       return list[0];
     },
     enabled: !!projectId,

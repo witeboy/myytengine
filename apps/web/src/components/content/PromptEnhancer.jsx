@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Loader2, Sparkles, ImageIcon, Film, Wand2 } from 'lucide-react';
 
@@ -8,7 +8,7 @@ export default function PromptEnhancer({ scene, onEnhanced }) {
 
   const handleEnhance = async (type) => {
     setEnhancing(type);
-    await base44.functions.invoke('enhanceScenePrompts', {
+    await api.functions.invoke('enhanceScenePrompts', {
       scene_id: scene.id,
       enhance_type: type,
     });

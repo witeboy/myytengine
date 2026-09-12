@@ -1,4 +1,4 @@
-// Ported from base44/functions/proxyFetchAsset/entry/entry.ts — HAND-WRITTEN.
+// Ported from the original hosted proxyFetchAsset function — HAND-WRITTEN.
 //
 // Downloads a CORS-blocked provider URL server-side so the browser exporter can use it.
 // Small files come back as inline base64; large ones are re-hosted in R2.
@@ -25,8 +25,6 @@ const ALLOWED = [
   'aiquickdraw.com',
   'storage.googleapis.com',
   'firebasestorage.googleapis.com',
-  'cdn.base44.app',
-  'base44.app',
   'api.kie.ai',
   'kie-asset',
   'kie.ai',

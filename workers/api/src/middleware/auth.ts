@@ -1,9 +1,9 @@
-// Auth middleware — replaces Base44's `createClientFromRequest(req).auth.me()`.
+// Auth middleware — replaces the original platform's `createClientFromRequest(req).auth.me()`.
 //
 // The SPA sends `Authorization: Bearer <Neon Auth access token>`. We verify the JWT
 // against the issuer's JWKS and hand the router a `User`. Every ported function then
 // receives `ctx.user` already populated, so the old
-//     const user = await base44.auth.me(); if (!user) return 401
+//     const user = await the hosted auth SDK; if (!user) return 401
 // prologue is deleted from all ~274 handlers.
 
 import { HttpError, unauthorized } from '../lib/http';

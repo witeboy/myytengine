@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -19,7 +19,7 @@ export default function StoryHooks() {
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
     queryFn: async () => {
-      const list = await base44.entities.Projects.filter({ id: projectId });
+      const list = await api.entities.Projects.filter({ id: projectId });
       return list[0];
     },
     enabled: !!projectId,
@@ -36,7 +36,7 @@ export default function StoryHooks() {
     queryKey: ['topic', project?.selected_topic_id],
     queryFn: async () => {
       if (!project?.selected_topic_id) return null;
-      const list = await base44.entities.Topics.filter({ id: project.selected_topic_id });
+      const list = await api.entities.Topics.filter({ id: project.selected_topic_id });
       return list[0];
     },
     enabled: !!project?.selected_topic_id,
@@ -45,7 +45,7 @@ export default function StoryHooks() {
   const { data: hooks = [], refetch: refetchHooks } = useQuery({
     queryKey: ['hooks', projectId],
     queryFn: async () => {
-      const all = await base44.entities.Hooks.filter({ project_id: projectId });
+      const all = await api.entities.Hooks.filter({ project_id: projectId });
       return all.sort((a, b) => a.rank - b.rank);
     },
     enabled: !!projectId,
@@ -56,7 +56,7 @@ export default function StoryHooks() {
     const generate = async () => {
       if (!project || !topic || hooks.length > 0 || generatingHooks || hooksGenerated) return;
       setGeneratingHooks(true);
-      await base44.functions.invoke('generateHooks', {
+      await api.functions.invoke('generateHooks', {
         project_id: projectId,
         topic_id: project.selected_topic_id,
         topic_title: topic.title,
@@ -70,8 +70,8 @@ export default function StoryHooks() {
 
   const handleSelect = async (hook) => {
     setSelecting(hook.id);
-    await base44.entities.Hooks.update(hook.id, { is_selected: true });
-    await base44.entities.Projects.update(projectId, {
+    await api.entities.Hooks.update(hook.id, { is_selected: true });
+    await api.entities.Projects.update(projectId, {
       selected_hook_id: hook.id,
       status: 'hooks_ready',
       current_step: 3,

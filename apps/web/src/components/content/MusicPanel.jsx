@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,7 @@ export default function MusicPanel({ project }) {
 
   const { data: tracks = [], refetch } = useQuery({
     queryKey: ['music', project?.id],
-    queryFn: () => base44.entities.MusicTracks.filter({ project_id: project.id }),
+    queryFn: () => api.entities.MusicTracks.filter({ project_id: project.id }),
     enabled: !!project?.id,
   });
 
@@ -53,7 +53,7 @@ export default function MusicPanel({ project }) {
         ? SLEEP_MUSIC_PROMPT
         : `Create background music for a ${project.niche || 'general'} YouTube video with a ${project.tone || 'dramatic'} tone. Cinematic, suitable for storytelling narration.`);
 
-    const result = await base44.integrations.Core.InvokeLLM({
+    const result = await api.integrations.Core.InvokeLLM({
       prompt: `Based on this request: "${prompt}"
 Generate 3 distinct background music track concepts for a YouTube video. Each should have a detailed prompt suitable for AI music generation.
 Return JSON:
@@ -83,7 +83,7 @@ Return JSON:
 
     if (result?.tracks) {
       for (const track of result.tracks) {
-        await base44.entities.MusicTracks.create({
+        await api.entities.MusicTracks.create({
           project_id: project.id,
           title: track.title,
           genre: track.genre,
@@ -101,7 +101,7 @@ Return JSON:
     setGeneratingTrackId(track.id);
     let res;
     try {
-      res = await base44.functions.invoke('generateMusic', {
+      res = await api.functions.invoke('generateMusic', {
         track_id: track.id,
         prompt: track.prompt,
         genre: track.genre,
@@ -113,7 +113,7 @@ Return JSON:
       const provider = errData?.provider || 'KIE (Suno)';
       const msg = errData?.error || err.message || 'Music generation failed';
       const isCredits = err?.response?.status === 402 || /credit|balance|top.?up|insufficient/i.test(msg);
-      await base44.entities.MusicTracks.update(track.id, { status: 'failed' });
+      await api.entities.MusicTracks.update(track.id, { status: 'failed' });
       setGeneratingTrackId(null);
       refetch();
       toast({
@@ -139,7 +139,7 @@ Return JSON:
       let failCount = 0;
       const poll = setInterval(async () => {
         try {
-          const statusRes = await base44.functions.invoke('checkMusicStatus', {
+          const statusRes = await api.functions.invoke('checkMusicStatus', {
             task_id: taskId,
             track_id: track.id,
           });
@@ -156,7 +156,7 @@ Return JSON:
           if (failCount >= 5) {
             clearInterval(poll);
             setGeneratingTrackId(null);
-            await base44.entities.MusicTracks.update(track.id, { status: 'failed' });
+            await api.entities.MusicTracks.update(track.id, { status: 'failed' });
             refetch();
             toast({ title: 'Music Status Check Failed', description: 'Could not verify music generation status after multiple attempts.', variant: 'destructive', duration: 3000 });
           }
@@ -170,19 +170,19 @@ Return JSON:
 
   const handleSelect = async (trackId) => {
     for (const t of tracks) {
-      if (t.is_selected) await base44.entities.MusicTracks.update(t.id, { is_selected: false });
+      if (t.is_selected) await api.entities.MusicTracks.update(t.id, { is_selected: false });
     }
-    await base44.entities.MusicTracks.update(trackId, { is_selected: true });
+    await api.entities.MusicTracks.update(trackId, { is_selected: true });
     refetch();
   };
 
   const handleVolumeChange = async (trackId, vol) => {
-    await base44.entities.MusicTracks.update(trackId, { volume: vol });
+    await api.entities.MusicTracks.update(trackId, { volume: vol });
     refetch();
   };
 
   const handleSavePrompt = async (trackId) => {
-    await base44.entities.MusicTracks.update(trackId, { prompt: editedPrompt });
+    await api.entities.MusicTracks.update(trackId, { prompt: editedPrompt });
     setEditingPromptId(null);
     refetch();
   };

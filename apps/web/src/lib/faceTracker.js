@@ -1,4 +1,4 @@
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 
 // ══════════════════════════════════════════════════════════════════
 // FACE TRACKER — Multi-frame face detection for smooth 9:16 reframing
@@ -67,7 +67,7 @@ export async function buildFaceTrack(videoEl, clip, onProgress = () => {}) {
   const results = [];
   for (let i = 0; i < frames.length; i++) {
     try {
-      const value = await base44.functions.invoke('detectFaceRegion', { image_base64: frames[i].b64 });
+      const value = await api.functions.invoke('detectFaceRegion', { image_base64: frames[i].b64 });
       results.push({ status: 'fulfilled', value });
     } catch (reason) {
       results.push({ status: 'rejected', reason });

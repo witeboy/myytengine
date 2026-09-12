@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -22,7 +22,7 @@ export default function LongViralScriptStage({ projectId, project, scripts, onRe
       let done = false;
       let batchNum = 0;
       while (!done) {
-        const res = await base44.functions.invoke('longViralGenerateScript', { project_id: projectId });
+        const res = await api.functions.invoke('longViralGenerateScript', { project_id: projectId });
         const data = res.data || res;
         done = data.done;
         if (data.completed_batch) {

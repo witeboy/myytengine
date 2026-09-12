@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { DragDropContext, Droppable } from '@hello-pangea/dnd';
 import DraggableSceneCard from './DraggableSceneCard';
 import ActGroupHeader from './ActGroupHeader';
@@ -48,7 +48,7 @@ export default function SceneGrid({ scenes, onRefetch, orientation }) {
     })).filter(u => u.newNumber !== u.oldNumber);
 
     await Promise.all(
-      updates.map(u => base44.entities.Scenes.update(u.id, { scene_number: u.newNumber }))
+      updates.map(u => api.entities.Scenes.update(u.id, { scene_number: u.newNumber }))
     );
 
     onRefetch();
@@ -66,14 +66,14 @@ export default function SceneGrid({ scenes, onRefetch, orientation }) {
   const sceneCallbacks = (scene) => ({
     onRegenerateImage: async () => {
       try {
-        await base44.functions.invoke('generateSceneImage', { scene_id: scene.id });
+        await api.functions.invoke('generateSceneImage', { scene_id: scene.id });
         onRefetch();
 
         // Poll until resolved (max 2 min)
         for (let i = 0; i < 24; i++) {
           await new Promise(r => setTimeout(r, 5000));
           try {
-            const pollRes = await base44.functions.invoke('pollSceneImage', { scene_id: scene.id });
+            const pollRes = await api.functions.invoke('pollSceneImage', { scene_id: scene.id });
             const pollData = pollRes.data || pollRes;
             const result = pollData.results?.[0];
             if (result?.status === 'done' || result?.status === 'failed') {
@@ -89,7 +89,7 @@ export default function SceneGrid({ scenes, onRefetch, orientation }) {
     },
     onAnimateScene: async () => {
       try {
-        const res = await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
+        const res = await api.functions.invoke('generateSceneVideo', { scene_id: scene.id });
         if (res.data?.error) {
           console.warn(`Scene ${scene.scene_number} animate error:`, res.data.error);
         }

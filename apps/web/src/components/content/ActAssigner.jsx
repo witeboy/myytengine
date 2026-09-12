@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -14,14 +14,14 @@ export default function ActAssigner({ scene, existingActs, onSaved }) {
   const allActs = [...new Set([...DEFAULT_ACTS, ...existingActs])];
 
   const handleAssign = async (actName) => {
-    await base44.entities.Scenes.update(scene.id, { act: actName });
+    await api.entities.Scenes.update(scene.id, { act: actName });
     setOpen(false);
     onSaved?.();
   };
 
   const handleCustom = async () => {
     if (!customAct.trim()) return;
-    await base44.entities.Scenes.update(scene.id, { act: customAct.trim() });
+    await api.entities.Scenes.update(scene.id, { act: customAct.trim() });
     setCustomAct('');
     setOpen(false);
     onSaved?.();

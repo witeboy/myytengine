@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Loader2 } from 'lucide-react';
 
 const PROVIDERS = [
@@ -15,7 +15,7 @@ export default function ProviderRegenButtons({ scene, onComplete }) {
     setGenerating(providerId);
     try {
       // Submit with specific provider
-      await base44.functions.invoke('generateSceneImage', {
+      await api.functions.invoke('generateSceneImage', {
         scene_id: scene.id,
         preferred_provider: providerId
       });
@@ -23,7 +23,7 @@ export default function ProviderRegenButtons({ scene, onComplete }) {
       // Poll until done (max ~2 min)
       for (let i = 0; i < 24; i++) {
         await new Promise(r => setTimeout(r, 5000));
-        const pollRes = await base44.functions.invoke('pollSceneImage', { scene_id: scene.id });
+        const pollRes = await api.functions.invoke('pollSceneImage', { scene_id: scene.id });
         const result = (pollRes.data || pollRes).results?.[0];
         if (result?.status === 'done' || result?.status === 'failed') break;
       }

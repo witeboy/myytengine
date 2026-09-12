@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -71,7 +71,7 @@ export default function ChannelThumbnailDNAPanel({ channel_id, channel_name }) {
   async function load() {
     setLoading(true);
     try {
-      const list = await base44.entities.ChannelThumbnailDNA.filter({ channel_id });
+      const list = await api.entities.ChannelThumbnailDNA.filter({ channel_id });
       setDna(list[0] || emptyDna(channel_id));
     } catch (e) {
       console.error('Load DNA failed:', e);
@@ -87,9 +87,9 @@ export default function ChannelThumbnailDNAPanel({ channel_id, channel_name }) {
     try {
       const payload = { ...dna, channel_id };
       if (dna.id) {
-        await base44.entities.ChannelThumbnailDNA.update(dna.id, payload);
+        await api.entities.ChannelThumbnailDNA.update(dna.id, payload);
       } else {
-        const created = await base44.entities.ChannelThumbnailDNA.create(payload);
+        const created = await api.entities.ChannelThumbnailDNA.create(payload);
         setDna(created);
       }
     } catch (e) {
@@ -101,7 +101,7 @@ export default function ChannelThumbnailDNAPanel({ channel_id, channel_name }) {
   async function uploadFace(file, index) {
     setUploading(true);
     try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_url } = await api.integrations.Core.UploadFile({ file });
       const updated = [...faces];
       if (typeof index === 'number') updated[index] = file_url;
       else updated.push(file_url);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -684,14 +684,14 @@ export default function TimelineEditor() {
   // ── Data queries ────────────────────────────────────────────────
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
-    queryFn:  async () => (await base44.entities.Projects.filter({ id: projectId }))[0],
+    queryFn:  async () => (await api.entities.Projects.filter({ id: projectId }))[0],
     enabled:  !!projectId
   });
 
   const { data: scenes = [] } = useQuery({
     queryKey: ['scenes', projectId],
     queryFn:  async () => {
-      const all = await base44.entities.Scenes.filter({ project_id: projectId });
+      const all = await api.entities.Scenes.filter({ project_id: projectId });
       return all.sort((a, b) => (a.scene_number || 0) - (b.scene_number || 0));
     },
     enabled: !!projectId
@@ -699,7 +699,7 @@ export default function TimelineEditor() {
 
   const { data: prodSettings } = useQuery({
     queryKey: ['prod-settings', projectId],
-    queryFn:  async () => { const l = await base44.entities.ProductionSettings.filter({ project_id: projectId }); return l[0] || null; },
+    queryFn:  async () => { const l = await api.entities.ProductionSettings.filter({ project_id: projectId }); return l[0] || null; },
     enabled:  !!projectId
   });
 
@@ -707,7 +707,7 @@ export default function TimelineEditor() {
 
   const { data: musicTracks = [] } = useQuery({
     queryKey: ['music-timeline', projectId],
-    queryFn:  () => base44.entities.MusicTracks.filter({ project_id: projectId }),
+    queryFn:  () => api.entities.MusicTracks.filter({ project_id: projectId }),
     enabled:  !!projectId,
   });
   const selectedMusic = musicTracks.find(t => t.is_selected);
@@ -1048,7 +1048,7 @@ export default function TimelineEditor() {
       // Step 9: Persist to DB (non-fatal)
       if (prodSettings?.id) {
         try {
-          await base44.entities.ProductionSettings.update(prodSettings.id, {
+          await api.entities.ProductionSettings.update(prodSettings.id, {
             beat_durations:   JSON.stringify(newBeatDurations),
             beat_start_times: JSON.stringify(newStartTimes),
           });
@@ -1113,7 +1113,7 @@ export default function TimelineEditor() {
     // Persist
     if (prodSettings?.id) {
       try {
-        await base44.entities.ProductionSettings.update(prodSettings.id, {
+        await api.entities.ProductionSettings.update(prodSettings.id, {
           beat_durations: JSON.stringify(newDurations),
           beat_start_times: JSON.stringify(newStarts),
         });
@@ -1466,9 +1466,9 @@ export default function TimelineEditor() {
       // so we just re-derive them from the selected music track on load.
       if (overrideBeatDurations) payload.beat_durations = JSON.stringify(overrideBeatDurations);
       if (prodSettings?.id) {
-        await base44.entities.ProductionSettings.update(prodSettings.id, payload);
+        await api.entities.ProductionSettings.update(prodSettings.id, payload);
       } else {
-        await base44.entities.ProductionSettings.create({ project_id: projectId, ...payload });
+        await api.entities.ProductionSettings.create({ project_id: projectId, ...payload });
       }
       setSaveStatus('saved');
     } catch (e) {
@@ -1555,7 +1555,7 @@ export default function TimelineEditor() {
           setOverrideBeatDurations(null);
           if (prodSettings?.id) {
             try {
-              await base44.entities.ProductionSettings.update(prodSettings.id, {
+              await api.entities.ProductionSettings.update(prodSettings.id, {
                 beat_durations: null,
                 beat_start_times: null,
                 timeline_video_clips: null,

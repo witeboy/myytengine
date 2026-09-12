@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -41,7 +41,7 @@ export default function ChannelDetail() {
   const { data: channel, isLoading: loadingChannel } = useQuery({
     queryKey: ['channel', channelId],
     queryFn: async () => {
-      const list = await base44.entities.Channels.filter({ id: channelId });
+      const list = await api.entities.Channels.filter({ id: channelId });
       return list[0];
     },
     enabled: !!channelId,
@@ -49,13 +49,13 @@ export default function ChannelDetail() {
 
   const { data: topics = [], refetch: refetchTopics } = useQuery({
     queryKey: ['channel-topics', channelId],
-    queryFn: () => base44.entities.ChannelTopics.filter({ channel_id: channelId }),
+    queryFn: () => api.entities.ChannelTopics.filter({ channel_id: channelId }),
     enabled: !!channelId,
   });
 
   const handleStartPipeline = async (topic) => {
     if (topic.project_id) {
-      const existingProjects = await base44.entities.Projects.filter({ id: topic.project_id });
+      const existingProjects = await api.entities.Projects.filter({ id: topic.project_id });
       if (existingProjects[0]) {
         const ep = existingProjects[0];
         // Route sleep projects to their dedicated pipeline
@@ -82,7 +82,7 @@ export default function ChannelDetail() {
     const isLongViral = channel.script_mode === 'long_viral';
     const projectMode = isLongViral ? 'long_viral' : '';
 
-    const project = await base44.entities.Projects.create({
+    const project = await api.entities.Projects.create({
       name: topic.title,
       niche: channel.niche,
       tone: channel.tone || 'dramatic',
@@ -97,7 +97,7 @@ export default function ChannelDetail() {
       project_mode: projectMode,
     });
 
-    const importedTopic = await base44.entities.Topics.create({
+    const importedTopic = await api.entities.Topics.create({
       project_id: project.id,
       rank: 1,
       title: topic.title,
@@ -108,13 +108,13 @@ export default function ChannelDetail() {
       is_selected: true,
     });
 
-    await base44.entities.Projects.update(project.id, {
+    await api.entities.Projects.update(project.id, {
       selected_topic_id: importedTopic.id,
       status: 'topic_selected',
       current_step: 1,
     });
 
-    await base44.entities.ChannelTopics.update(topic.id, {
+    await api.entities.ChannelTopics.update(topic.id, {
       project_id: project.id,
       status: 'in_progress',
     });
@@ -311,7 +311,7 @@ export default function ChannelDetail() {
                 <ScriptModeSelector
                   value={channel.script_mode || 'standard'}
                   onChange={async (mode) => {
-                    await base44.entities.Channels.update(channel.id, { script_mode: mode });
+                    await api.entities.Channels.update(channel.id, { script_mode: mode });
                     queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
                   }}
                 />
@@ -330,7 +330,7 @@ export default function ChannelDetail() {
                         <button
                           key={n.id}
                           onClick={async () => {
-                            await base44.entities.Channels.update(channel.id, { shorts_niche: n.id });
+                            await api.entities.Channels.update(channel.id, { shorts_niche: n.id });
                             queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
                           }}
                           className={`text-left p-3 rounded-lg border-2 transition-all ${

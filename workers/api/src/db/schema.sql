@@ -1,5 +1,5 @@
 -- myytengine D1 schema. GENERATED - see MIGRATION-PLAN.md C-3.
--- Every table: typed declared columns + `attrs` JSON overflow (Base44 was schemaless).
+-- Every table: typed declared columns + `attrs` JSON overflow (the original platform was schemaless).
 PRAGMA foreign_keys = OFF;
 
 CREATE TABLE IF NOT EXISTS AssetPlans (

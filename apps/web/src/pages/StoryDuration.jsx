@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api as base44 } from '@/api/client';
+import { api } from '@/api/client';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,7 @@ export default function StoryDuration() {
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
     queryFn: async () => {
-      const list = await base44.entities.Projects.filter({ id: projectId });
+      const list = await api.entities.Projects.filter({ id: projectId });
       return list[0];
     },
     enabled: !!projectId,
@@ -32,7 +32,7 @@ export default function StoryDuration() {
   const { data: channel } = useQuery({
     queryKey: ['channel-for-niche', project?.channel_id],
     queryFn: async () => {
-      const list = await base44.entities.Channels.filter({ id: project.channel_id });
+      const list = await api.entities.Channels.filter({ id: project.channel_id });
       return list[0];
     },
     enabled: !!project?.channel_id,
@@ -56,7 +56,7 @@ export default function StoryDuration() {
   const { data: topic } = useQuery({
     queryKey: ['topic', project?.selected_topic_id],
     queryFn: async () => {
-      const list = await base44.entities.Topics.filter({ id: project.selected_topic_id });
+      const list = await api.entities.Topics.filter({ id: project.selected_topic_id });
       return list[0];
     },
     enabled: !!project?.selected_topic_id,
@@ -73,7 +73,7 @@ export default function StoryDuration() {
   const handleGenerate = async () => {
     const finalDuration = isShorts ? 1.5 : Math.max(1, Math.round(safeDuration));
     setLoading(true);
-    await base44.entities.Projects.update(projectId, {
+    await api.entities.Projects.update(projectId, {
       video_duration_minutes: finalDuration,
       project_mode: scriptMode || '',
       orientation: isShorts ? 'portrait' : (project?.orientation || 'landscape'),
@@ -82,9 +82,9 @@ export default function StoryDuration() {
     // Shorts skip outline — save niche, go straight to script page
     if (isShorts) {
       if (project?.channel_id) {
-        try { await base44.entities.Channels.update(project.channel_id, { shorts_niche: shortsNiche }); } catch (_) {}
+        try { await api.entities.Channels.update(project.channel_id, { shorts_niche: shortsNiche }); } catch (_) {}
       }
-      await base44.entities.Projects.update(projectId, { status: 'hooks_ready' });
+      await api.entities.Projects.update(projectId, { status: 'hooks_ready' });
       navigate(createPageUrl(`StoryScript?project_id=${projectId}`));
       setLoading(false);
       return;
@@ -93,9 +93,9 @@ export default function StoryDuration() {
     // Long Viral skip outline — save niche, go to LongViralPipeline
     if (isLongViral) {
       if (project?.channel_id) {
-        try { await base44.entities.Channels.update(project.channel_id, { shorts_niche: shortsNiche }); } catch (_) {}
+        try { await api.entities.Channels.update(project.channel_id, { shorts_niche: shortsNiche }); } catch (_) {}
       }
-      await base44.entities.Projects.update(projectId, { status: 'topic_selected' });
+      await api.entities.Projects.update(projectId, { status: 'topic_selected' });
       navigate(`/LongViralPipeline?project_id=${projectId}`);
       setLoading(false);
       return;
@@ -103,7 +103,7 @@ export default function StoryDuration() {
 
     // Save story arch / explainer subject for new modes
     if ((scriptMode === 'story' || scriptMode === 'explainer') && project?.channel_id) {
-      try { await base44.entities.Channels.update(project.channel_id, { shorts_niche: shortsNiche }); } catch (_) {}
+      try { await api.entities.Channels.update(project.channel_id, { shorts_niche: shortsNiche }); } catch (_) {}
     }
     // Also save directly to project so the backend can read it immediately.
     // For explainer mode, map the subject (explainer_tech / explainer_finance / ...) to
@@ -121,12 +121,12 @@ export default function StoryDuration() {
         };
         updates.explainer_arc = arcMap[shortsNiche] || 'professor';
       }
-      await base44.entities.Projects.update(projectId, updates);
+      await api.entities.Projects.update(projectId, updates);
     }
 
     // Outline + batches are now created by initializeScriptBatches on StoryScript
     // auto-trigger. We just set status and navigate.
-    await base44.entities.Projects.update(projectId, { status: 'hooks_ready' });
+    await api.entities.Projects.update(projectId, { status: 'hooks_ready' });
     navigate(createPageUrl(`StoryScript?project_id=${projectId}`));
   };
 
@@ -135,7 +135,7 @@ export default function StoryDuration() {
     const modeChanged = (scriptMode || '') !== (project.project_mode || '');
     if (finalDuration !== project.video_duration_minutes || modeChanged) {
       setLoading(true);
-      await base44.entities.Projects.update(projectId, {
+      await api.entities.Projects.update(projectId, {
         video_duration_minutes: finalDuration,
         project_mode: scriptMode || '',
         orientation: isShorts ? 'portrait' : (project?.orientation || 'landscape'),
