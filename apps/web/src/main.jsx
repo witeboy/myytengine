@@ -9,8 +9,16 @@ import '@/index.css';
 
 const isAuthRoute = /^\/handler(?:\/|$)/.test(window.location.pathname);
 
+// `social` has no default in @neondatabase/auth-ui: with the prop absent the sign-in
+// view renders email/password only, which is why no Google button appeared. Google is
+// configured on the Neon Auth branch as a shared provider.
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <NeonAuthUIProvider authClient={authClient} basePath="/handler" redirectTo="/">
+  <NeonAuthUIProvider
+    authClient={authClient}
+    basePath="/handler"
+    redirectTo="/"
+    social={{ providers: ['google'] }}
+  >
     {isAuthRoute ? <AuthHandler /> : <App />}
   </NeonAuthUIProvider>,
 );
