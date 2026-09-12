@@ -173,6 +173,49 @@ describe('OAuth callback', () => {
   });
 });
 
+describe('email one-time code fallback', () => {
+  const otp = (body: unknown, over: Partial<Env> = {}) =>
+    handleAuth(
+      request('https://api.test/api/auth/otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
+      env(over),
+      '/api/auth/otp',
+      CORS,
+    );
+
+  it('rejects a malformed address before touching the mailer', async () => {
+    await expect(otp({ email: 'not-an-email' })).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('says so loudly when no mail provider is configured', async () => {
+    await expect(otp({ email: 'person@example.com' })).rejects.toMatchObject({ status: 503 });
+  });
+
+  it('sends a code when a provider is present, without revealing whether the account exists', async () => {
+    const sent: any[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      sent.push({ url: String(url), body: JSON.parse(String(init.body)) });
+      return new Response('{}', { status: 200 });
+    }));
+
+    const res = await otp({ email: 'person@example.com' }, { RESEND_API_KEY: 'test' });
+    expect(await res.json()).toEqual({ data: { success: true, sent: true } });
+    expect(sent[0].url).toBe('https://api.resend.com/emails');
+    // Six digits, and the code itself is only ever in the email.
+    expect(String(sent[0].body.subject)).toMatch(/^\d{6} is your/);
+    expect(statements.join(' ')).toContain('INSERT INTO auth_codes');
+  });
+
+  it('rejects a wrong or expired code', async () => {
+    await expect(
+      otp({ email: 'person@example.com', code: '000000' }, { RESEND_API_KEY: 'test' }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+});
+
 describe('session endpoints', () => {
   it('reports an anonymous caller as null rather than erroring', async () => {
     const res = await handleAuth(request('https://api.test/api/auth/me'), env(), '/api/auth/me', CORS);

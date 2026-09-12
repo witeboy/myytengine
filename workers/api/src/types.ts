@@ -43,6 +43,11 @@ export interface Env {
   GOOGLE_CLIENT_SECRET?: string;   // SECRET
   /** Comma-separated addresses promoted to role 'admin' on sign-in. */
   ADMIN_EMAILS?: string;
+  /** Email sign-in fallback. Cloudflare Email Sending is tried first, then Resend.
+   *  Without one of these, only Google sign-in is available. */
+  CLOUDFLARE_EMAIL_API_TOKEN?: string;  // SECRET
+  RESEND_API_KEY?: string;              // SECRET
+  MAIL_FROM?: string;
 
   MEDIA_PUBLIC_BASE: string;     // R2 backend only (no trailing slash)
   ALLOWED_ORIGINS: string;       // comma-separated exact origins

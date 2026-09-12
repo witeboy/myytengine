@@ -15,11 +15,14 @@
 // would produce a redirect_uri Google has never seen.
 
 import { badRequest, HttpError } from '../lib/http';
+import { mailConfigured, sendEmail, signInCodeEmail } from '../lib/mailer';
 import {
   consumeCode,
+  consumeEmailCode,
   currentUser,
   endSession,
   issueCode,
+  issueEmailCode,
   rememberCookie,
   startSession,
   upsertUser,
@@ -183,6 +186,41 @@ export async function handleAuth(
       session,
       rememberCookie(user.email),
     ]);
+  }
+
+  // ── email one-time code ───────────────────────────────────────────────────
+  // Two actions on one route, as in the other apps: without `code` it sends one,
+  // with `code` it verifies. This is the way back in when Google is unavailable.
+  if (route === 'otp') {
+    if (req.method !== 'POST') throw new HttpError(405, 'POST required.');
+
+    const body = (await req.json().catch(() => ({}))) as { email?: string; code?: string };
+    const email = String(body.email || '').trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email)) {
+      throw badRequest('Enter a valid email address.');
+    }
+
+    if (!body.code) {
+      if (!mailConfigured(env)) {
+        throw new HttpError(503, 'Email sign-in is not configured on this deployment.');
+      }
+      const code = await issueEmailCode(env, email);
+      await sendEmail(env, { to: email, ...signInCodeEmail(code) });
+      // Deliberately the same answer whether or not the address has an account:
+      // this endpoint must not report who is registered.
+      return json({ data: { success: true, sent: true } }, cors);
+    }
+
+    if (!(await consumeEmailCode(env, email, String(body.code)))) {
+      throw badRequest('That code is incorrect or has expired.');
+    }
+
+    const user = await upsertUser(env, { email });
+    const session = await startSession(env, req, user.id);
+    const headers = new Headers({ 'Content-Type': 'application/json', ...cors });
+    headers.append('Set-Cookie', session);
+    headers.append('Set-Cookie', rememberCookie(user.email));
+    return new Response(JSON.stringify({ data: { success: true, user } }), { status: 200, headers });
   }
 
   // ── sign out ──────────────────────────────────────────────────────────────

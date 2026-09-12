@@ -232,6 +232,51 @@ export async function issueCode(
   return code;
 }
 
+export const OTP_LENGTH = 6;
+export const OTP_TTL_SECONDS = 600;
+
+/** A 6-digit code is short enough to retype, so it is scoped to one address and
+ *  single-use. The hash covers the address too, so the same digits issued to two
+ *  people can never collide into one another's account. */
+export async function issueEmailCode(env: Env, email: string): Promise<string> {
+  const sql = db(env);
+  const normalized = email.trim().toLowerCase();
+  const digits = crypto.getRandomValues(new Uint32Array(1))[0] % 10 ** OTP_LENGTH;
+  const code = String(digits).padStart(OTP_LENGTH, '0');
+  const expiresAt = new Date(Date.now() + OTP_TTL_SECONDS * 1000).toISOString();
+
+  // Supersede any code still outstanding for this address, so the newest email
+  // is the only one that works.
+  await sql`
+    UPDATE auth_codes SET consumed_at = now()
+     WHERE kind = 'email_code' AND email = ${normalized} AND consumed_at IS NULL
+  `;
+  await sql`
+    INSERT INTO auth_codes (kind, code_hash, email, expires_at)
+    VALUES ('email_code', ${await hashToken(`${normalized}:${code}`)}, ${normalized}, ${expiresAt})
+  `;
+  return code;
+}
+
+/** Verifies a one-time code for an address, consuming it. */
+export async function consumeEmailCode(env: Env, email: string, code: string): Promise<boolean> {
+  if (!code) return false;
+  const sql = db(env);
+  const normalized = email.trim().toLowerCase();
+
+  const row = one(await sql`
+    UPDATE auth_codes
+       SET consumed_at = now()
+     WHERE kind = 'email_code'
+       AND email = ${normalized}
+       AND code_hash = ${await hashToken(`${normalized}:${code}`)}
+       AND consumed_at IS NULL
+       AND expires_at > now()
+     RETURNING id
+  `);
+  return Boolean(row);
+}
+
 /** Consumes a code exactly once. Returns its row, or null when invalid. */
 export async function consumeCode(
   env: Env,
