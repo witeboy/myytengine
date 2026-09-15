@@ -215,7 +215,7 @@ function detectCharacterPresence(scene) {
 
   // Priority 2: Prompt content analysis
   const prompt = (scene.image_prompt || '').toLowerCase();
-  const humanIndicators = /\b(woman|man|person|figure|character|boy|girl|child|worker|doctor|soldier|officer|teacher|scientist|skeleton|people|crowd|couple|family|mother|father|husband|wife|protagonist|narrator)\b/;
+  const humanIndicators = /\b(woman|man|person|figure|character|boy|girl|child|worker|doctor|soldier|officer|teacher|scientist|skeleton|mannequin|people|crowd|couple|family|mother|father|husband|wife|protagonist|narrator)\b/;
   return humanIndicators.test(prompt);
 }
 

@@ -233,7 +233,7 @@ function normalizeStyleKey(raw) {
     'cartoon_2d', 'picstory_cocomelon', 'cinematic_picstory', 'oil_painting',
     'watercolor', 'comic_book', 'humpty_dumpty', 'harry_potter',
     '3d_whiteboard_cartoon', 'low_poly_3d_cartoon', 'skeleton_protagonist',
-    'afro_nolly_global'
+    'afro_nolly_global', 'faceless_mannequin'
   ];
   if (knownStyles.includes(normalized)) return normalized;
   for (const key of knownStyles) {
@@ -248,6 +248,11 @@ function getStyleCharacterDirective(visualStyle) {
 **🦴 MANDATORY — SKELETON PROTAGONIST STYLE:**
 CHARACTER: Photorealistic transparent glass-like humanoid body shell with glossy ivory skeleton visible inside (ribcage, spine, pelvis, all bones). Big round expressive brown/amber EYEBALLS in skull sockets (NOT empty dark sockets). Adult male proportions, context-appropriate clothing per scene. NOT scary — relatable HERO.
 RULES: Show FULL BODY in most scenes. Environment FIRST, then character. Character must be DOING something. Include other photorealistic humans in most scenes. Every scene has a CONTINUITY ELEMENT bridging to the next. Use varied camera angles. Blurred backgrounds BANNED.`,
+    faceless_mannequin: `
+**🕯️ MANDATORY — FACELESS MANNEQUIN STYLE:**
+CHARACTERS: EVERY person, protagonist and supporting cast, is a faceless white porcelain mannequin: smooth featureless glossy head with NO eyes, nose or mouth, white porcelain hands. Told apart by wardrobe, hair or headwear, build and posture. Clothing richly textured and accurate to the era and region. Elegant and dignified, never creepy.
+WORLD: Period-accurate settings matched to the story's era and region. Low-key chiaroscuro from practical light sources (candles, oil lamps, firelight, a single window). Warm amber, tobacco and parchment tones over deep rich blacks. Tactile textures: aged wood grain, worn stone, brass patina, leather, linen, parchment. Exteriors keep the same palette under low golden or overcast light.
+RULES: Emotion is carried by posture, gesture and light, never by facial expression. Environment FIRST, then characters mid-action. No readable text on any object.`,
     afro_nolly_global: `
 **🌍 MANDATORY — AFRO-NOLLY-GLOBAL STYLE:**
 This is a 3D Pixar/Illumination-quality CGI style set in African environments — Nollywood drama meets Disney animation.

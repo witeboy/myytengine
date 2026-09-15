@@ -57,7 +57,9 @@ IMPORTANT: Do NOT explain anything. Do NOT add commentary. Output ONLY the final
 async function cleanPromptWithOpenAI(ctx, messyPrompt, visualStyle) {
   try {
     const styleConstraint = visualStyle
-      ? (visualStyle === 'skeleton_protagonist'
+      ? (visualStyle === 'faceless_mannequin'
+        ? `\nThe visual style is faceless mannequin — every character is a faceless white porcelain mannequin with a smooth blank glossy head (no eyes, nose or mouth) and porcelain hands. Never add facial features, facial expressions or human skin. Keep the low-key candlelit chiaroscuro look. Do NOT write "Faceless mannequin" as a label prefix.`
+        : visualStyle === 'skeleton_protagonist'
         ? `\nThe visual style is skeleton protagonist — a transparent skeleton with glass-like body replaces the human character entirely. The skeleton is NOT overlaid on a real person. No real human skin or flesh on the protagonist. Other characters are normal humans. Do NOT write "Skeleton protagonist" as a label prefix.`
         : `\nThe visual style is strictly ${visualStyle.replace(/_/g, ' ')}. Lock this style and prevent any realism bleed or style mixing.`)
       : '';
@@ -193,6 +195,7 @@ function normalizeStyleKey(raw) {
   }
   if (normalized.includes('roblox')) { console.log(`✅ Keyword match: roblox`); return 'roblox'; }
   if (normalized.includes('skeleton')) { console.log(`✅ Keyword match: skeleton_protagonist`); return 'skeleton_protagonist'; }
+  if (normalized.includes('mannequin') || normalized.includes('faceless')) { console.log(`✅ Keyword match: faceless_mannequin`); return 'faceless_mannequin'; }
   if (normalized.includes('afro') || normalized.includes('nolly')) { console.log(`✅ Keyword match: afro_nolly_global`); return 'afro_nolly_global'; }
   console.warn(`❌ No match for "${raw}" → "${normalized}"`);
   return 'cinematic_realistic';
@@ -266,6 +269,10 @@ const styleMap = {
   skeleton_protagonist: {
    positive: "cinematic establishing shot composition, golden hour volumetric lighting, HDR cinematic lens, warm amber grading, photorealistic detailed environment with sharp focused background, masterpiece quality",
    negative: "real human skin, real human face, realistic flesh, normal human appearance, human skin visible through skeleton, dual character overlay, skeleton overlaid on human, x-ray medical scan, cartoon skeleton, halloween decoration, flat 2D, anime, comic, horror gore, neon, plastic toy, low quality, blurry, abstract, minimalist, sketch, painting, chibi, dia de los muertos, empty dark eye sockets, bare bones without transparent body, scary horror skeleton, torso only, bust shot, head and shoulders only, cropped at waist, isolated character on blank background, portrait crop, dark background, black background, text, words, letters, numbers, UI elements, screen content, garbled text"
+  },
+  faceless_mannequin: {
+    positive: "photorealistic period scene, low-key chiaroscuro lighting from practical sources (candles, oil lamps, firelight, a single window), warm amber, tobacco and parchment tones over deep rich blacks, soft light falloff into shadow, gentle atmospheric haze, rich tactile period textures, crisp micro-contrast, razor-sharp detail, masterpiece quality",
+    negative: "eyes, eyebrows, nose, mouth, lips, facial features, painted face, makeup, human skin, realistic human face, skin on hands, cracked porcelain, creepy doll, horror, uncanny, mask, store window display, plain studio backdrop, isolated character on blank background, cartoon, anime, 3D render, plastic toy, flat 2D, sketch, painting, bright flat lighting, high key, oversaturated, neon, text, words, letters, numbers, logos, garbled text, low quality, blurry"
   },
   afro_nolly_global: {
     positive: "3D Pixar-Illumination quality CGI animation, subsurface scattering on skin, soft ambient occlusion, individually strand-rendered hair showing fiber detail, realistic cloth folds and weight on clothing, warm natural lighting, vibrant saturated colors, cinematic composition with 3-layer depth staging, dramatic exaggerated expressions, detailed clothing textures, community of onlookers with expressive shocked or amused reactions, colorful compound courtyard setting with hand-painted signs on buildings, 16:9 cinematic aspect ratio, high-quality 3D rendering, Nollywood-style community drama meets Disney Pixar aesthetic",
@@ -382,6 +389,12 @@ function getStyleSceneBodyRules(styleName) {
       objects: "Photorealistic props the skeleton is actively interacting with — tools in hand, objects being held, furniture being used. Props tell the story. NEVER show readable text, numbers, or screen content on any object — describe the CHARACTER'S REACTION to information, not the information itself.",
       rendering: "Cinematic wide-to-medium framing. HDR cinematic lens, warm amber grading, dramatic volumetric golden hour lighting, strong rim light on bone edges. Sharp detailed backgrounds."
     },
+    faceless_mannequin: {
+      characters: "EVERY character, protagonist and supporting cast alike, is a faceless white porcelain mannequin: a smooth featureless glossy head with NO eyes, nose or mouth, and white porcelain hands. Characters are told apart by wardrobe, hair or headwear, build and posture. Clothing is richly textured and accurate to the story's era and region. Elegant and dignified, never creepy. Characters are DOING something: holding, offering, examining, working. NO human skin or human faces anywhere in the frame.",
+      environments: "Period-accurate settings matched to the story's era and region — cottages, courts, workshops, markets, studies, orchards. Rich tactile materials: dark aged wood with visible grain, worn stone and plaster, brass and copper, leather, linen, parchment, wax candles. Lived-in and detailed, with foreground elements framing the edges and backgrounds that stay readable.",
+      objects: "Props rendered in tactile detail — patina on metal, grain in wood, weave in fabric, wear on edges. No readable text on any object.",
+      rendering: "Low-key chiaroscuro lit by practical sources (candles, oil lamps, firelight, a single window). Warm amber, tobacco and parchment tones over deep, rich blacks. Soft light falloff into shadow, gentle atmospheric haze. Crisp micro-contrast and razor-sharp texture on the subject, shallow depth of field. Exterior scenes keep the same palette and contrast under low golden or overcast light."
+    },
     afro_nolly_global: {
       characters: "3D Pixar/Illumination quality CGI characters with subsurface scattering on skin (warm undertones, NEVER grey/ashy), individually strand-rendered hair with fiber detail. Character archetypes: MAMA/AUTHORITY — heavyset, imposing, round face, gold hoop earrings, headwrap or styled hair, colorful patterned clothing, often wielding wooden stick or pointing finger; YOUNG WOMAN — tall slim, long flowing hair, modern casual clothing (crop top + jeans, sneakers), defiant composed expression, arms crossed; POLICE — large overweight, light blue uniform, cap with badge, baton, stern expression; ELDER — thin weathered dignified, white beard or hair, traditional or formal clothing, walking stick; CHILD — 8-12 years old, HUGE Disney-style expressive eyes (30%+ of face), styled hair, casual clothing. ALL characters have DRAMATIC EXAGGERATED expressions — screaming, shocked, crying, defiant — NEVER neutral or calm. Diverse cast with varied skin tones and ethnicities.",
       environments: "COMPOUND COURTYARD: Colorful buildings (mustard, terracotta, dusty blue, sage green, salmon pink), terracotta or dark roofs, warm-colored dirt or paved ground, wooden doors, louvered windows, hanging laundry between buildings, potted flowers at doorsteps, scattered rocks, hand-painted signs with proverbs on buildings (black text on cream/white wood, all caps, hand-lettered). INDOOR: Warm-toned living rooms, kitchens, hallways with doorways where crowds peek in, candles, furniture, shelves. Night: warm artificial or candlelight as primary light, deep blue-black sky, HUGE stylized full moon.",
@@ -465,6 +478,22 @@ This is a 3D Pixar/Illumination quality CGI style for community drama storytelli
 
 **FORBIDDEN:** photorealistic, live action, dark/gloomy, anime, watercolor, sketch, grey/ashy skin, empty backgrounds, isolated portraits`,
 
+    faceless_mannequin: universalReinforcement + `
+**🕯️ FACELESS MANNEQUIN STYLE — CRITICAL RULES:**
+
+The character identity tag system will inject the mannequin description automatically. Do NOT write "Faceless mannequin" as a label or prefix in the prompt — describe the scene naturally.
+
+EVERY person in the scene is a faceless white porcelain mannequin: protagonist, companions, crowds and onlookers alike. No real human faces or human skin anywhere. Characters are distinguished by wardrobe, hair or headwear, build and posture.
+
+MANDATORY:
+- Describe the ENVIRONMENT first (era, place, materials, light sources), then place the mannequins within it, mid-action
+- Faces stay blank: NEVER describe eyes, gaze, smiles, frowns, tears or any facial expression. Emotion is carried by posture, gesture and light
+- Lighting: low-key chiaroscuro from practical sources (candles, oil lamps, firelight, a single window); exteriors under low golden or overcast light
+- Palette: warm amber, tobacco and parchment tones over deep rich blacks
+- Tactile period textures: aged wood grain, worn stone, brass and copper patina, leather, linen, parchment
+- The porcelain is elegant and dignified: never cracked, never creepy, never a shop-window display
+- NEVER show readable text, numbers or logos on any object`,
+
     skeleton_protagonist: universalReinforcement + `
 **🦴 SKELETON PROTAGONIST STYLE — CRITICAL RULES:**
 
@@ -498,7 +527,7 @@ MANDATORY FRAMING:
 function subjectTypeSanityCheck(prompt, sceneNumber) {
   // Detect primary subject from the first ~200 chars (image gen reads left-to-right)
   const head = prompt.substring(0, 250).toLowerCase();
-  const humanIndicators = /\b(woman|man|person|figure|character|boy|girl|child|worker|doctor|soldier|officer|teacher|scientist|protagonist|narrator|skeleton|individual|people|crowd|group|couple|family|mother|father|husband|wife)\b/;
+  const humanIndicators = /\b(woman|man|person|figure|character|boy|girl|child|worker|doctor|soldier|officer|teacher|scientist|protagonist|narrator|skeleton|mannequin|individual|people|crowd|group|couple|family|mother|father|husband|wife)\b/;
   const hasHuman = humanIndicators.test(head);
 
   if (hasHuman) return prompt; // Humans present — all descriptors allowed
@@ -554,7 +583,7 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
 
 
   // For non-photorealistic styles, strip any photorealistic camera language that may have leaked in
-  const isPhotoStyle = ['cinematic_realistic', 'photorealistic_4k', 'skeleton_protagonist'].includes(visualStyle);
+  const isPhotoStyle = ['cinematic_realistic', 'photorealistic_4k', 'skeleton_protagonist', 'faceless_mannequin'].includes(visualStyle);
   // Roblox is NOT a photo style — camera language will be stripped
   if (!isPhotoStyle) {
     enhanced = enhanced.replace(/\b(shot on|ARRI|Alexa|Canon|Sony|Nikon|Panavision|anamorphic|DSLR|RAW)\b/gi, '');
@@ -918,6 +947,14 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
         `a Roblox-style blocky ${bodyDesc} with cube head and rectangular limbs, simple cartoon dot-eyes and curved mouth painted on the face, ${faceDesc}, bright plastic matte colors`,
       skeleton_protagonist: (bodyDesc, faceDesc) =>
         `a transparent skeleton with glass-like body shell, glossy ivory bones visible through the translucent torso, big round expressive brown amber eyeballs alive in the skull sockets, dressed in context-appropriate clothing — no human skin or flesh anywhere`,
+      faceless_mannequin: (bodyDesc, faceDesc) => {
+        // Blank porcelain head: keep hair and headwear, drop skin, eyes, nose, lips and facial hair
+        const hair = (faceDesc || '').split(',').map((s) => s.trim())
+          .filter((s) => /\b(hair|bob|bun|braids?|curls?|locs|afro|ponytail|wig|bald|headwrap|bonnet|turban|hat|cap|crown|veil|scarf)\b/i.test(s)
+            && !/\b(skin|eyes?|eyebrows?|brows?|nose|lips?|mouth|face|cheeks?|freckles?|scars?|beard|moustache|mustache)\b/i.test(s))
+          .join(', ');
+        return `a faceless white porcelain mannequin with a smooth featureless glossy head (no eyes, nose or mouth) and white porcelain hands, ${bodyDesc}${hair ? ', ' + hair : ''}, in richly textured period clothing, no human skin anywhere`;
+      },
       afro_nolly_global: (bodyDesc, faceDesc) =>
         `a 3D Pixar-quality ${bodyDesc}, ${faceDesc}, skin glowing with warm subsurface scattering, individually strand-rendered hair with fiber detail, vibrant colorful clothing heavy with realistic fabric weight, gold jewelry catching the light`
     };
@@ -961,6 +998,13 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
     function getBodyProportionDirective(shotType) {
       if (!shotType) return 'actively engaged with their surroundings';
       const st = shotType.toLowerCase();
+      // Faceless mannequin: close framings must not invite skin, lips or eyes onto a blank porcelain head
+      if (visualStyle === 'faceless_mannequin') {
+        if (/\b(ecu|extreme\s*close|insert|detail)\b/.test(st))
+          return 'so close the frame fills with texture — the glossy curve of the blank porcelain head, the weave of fabric, light sliding across the surface';
+        if (/\b(mcu|medium\s*close|cu\b|close[\s-]*up)\b/.test(st))
+          return 'filling the frame, the smooth blank porcelain head turned toward the light, emotion carried by the tilt of the head and the set of the shoulders';
+      }
       if (/\b(ews|extreme\s*wide|establishing|aerial|drone|bird.?s?\s*eye)\b/.test(st))
         return 'a distant figure dwarfed by the vast environment, their silhouette and movement telling the story';
       if (/\b(ws\b|wide\s*shot|mws|medium\s*wide)\b/.test(st))
@@ -1045,7 +1089,7 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
 
         // ── MINIMAL: silhouette only (wide shots — character is small in frame)
         // Just enough to recognize "that's our character" at a distance
-        const minimalDesc = `a ${bodyDesc}${hairShort ? ', ' + hairShort : ''}${clothing ? ', wearing ' + clothing.substring(0, 60) : ''}`;
+        const minimalDesc = `a ${visualStyle === 'faceless_mannequin' ? 'faceless white porcelain mannequin, ' : ''}${bodyDesc}${hairShort ? ', ' + hairShort : ''}${clothing ? ', wearing ' + clothing.substring(0, 60) : ''}`;
 
         // ── MODERATE: action-level (medium shots — body visible, face not dominant)
         // Body + hair + skin + clothing — no detailed facial features

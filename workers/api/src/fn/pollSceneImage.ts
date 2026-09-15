@@ -38,7 +38,7 @@ function detectCharacterInScene(scene: any) {
     } catch (_) {}
   }
   const prompt = (scene.image_prompt || '').toLowerCase();
-  return /\b(woman|man|person|figure|character|boy|girl|child|worker|doctor|soldier|officer|teacher|scientist|skeleton|people|crowd|couple|family|mother|father|husband|wife|protagonist|narrator)\b/.test(prompt);
+  return /\b(woman|man|person|figure|character|boy|girl|child|worker|doctor|soldier|officer|teacher|scientist|skeleton|mannequin|people|crowd|couple|family|mother|father|husband|wife|protagonist|narrator)\b/.test(prompt);
 }
 
 async function submitProvider(

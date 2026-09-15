@@ -132,6 +132,7 @@ function normalizeStyleKey(raw) {
     if (normalized.includes(key) || key.includes(normalized)) { console.log(`✅ Fuzzy match: ${key}`); return key; }
   }
   if (normalized.includes('skeleton')) { console.log(`✅ Keyword match: skeleton_protagonist`); return 'skeleton_protagonist'; }
+  if (normalized.includes('mannequin') || normalized.includes('faceless')) { console.log(`✅ Keyword match: faceless_mannequin`); return 'faceless_mannequin'; }
   console.warn(`❌ No match for "${raw}" → "${normalized}"`);
   return 'cinematic_realistic';
 }
@@ -197,6 +198,10 @@ const styleMap = {
   low_poly_3d_cartoon: {
     positive: "Stylized low-poly 3D cartoon, all geometry from visible flat-shaded polygons and triangular facets. Realistic human proportions with geometric stylization. Angular facial features, expressive eyes, defined eyebrows. Geometric hair, warm peach-tan skin with polygon-edge shading. Clothing with visible folds and flat polygon faces. All environments built from flat-shaded polygons. Vibrant saturated colors, clean polygon edges, no smoothing, matte clay-toy quality, soft ambient occlusion, sharp focused background with all elements in focus, deep depth of field, Pixar expressiveness with geometric stylization",
    negative: "photorealistic, photograph, smooth high-poly, hyperrealistic, film grain, lens flare, bokeh, blurred background, shallow depth of field, out of focus background, anime, cel-shaded, 2D flat, hand-drawn, sketch, watercolor, oil painting, dark horror, neon cyberpunk, abstract, pixel art, voxel art, wireframe, monochrome, desaturated, ray-traced, photogrammetry, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature, funko pop"  },
+  faceless_mannequin: {
+    positive: "photorealistic period scene, low-key chiaroscuro lighting from practical sources (candles, oil lamps, firelight, a single window), warm amber, tobacco and parchment tones over deep rich blacks, soft light falloff into shadow, gentle atmospheric haze, rich tactile period textures, crisp micro-contrast, razor-sharp detail, masterpiece quality",
+    negative: "eyes, eyebrows, nose, mouth, lips, facial features, painted face, makeup, human skin, realistic human face, skin on hands, cracked porcelain, creepy doll, horror, uncanny, mask, store window display, plain studio backdrop, isolated character on blank background, cartoon, anime, 3D render, plastic toy, flat 2D, sketch, painting, bright flat lighting, high key, oversaturated, neon, text, words, letters, numbers, logos, garbled text, low quality, blurry"
+  },
   skeleton_protagonist: {
    positive: "wide shot showing complete scene, photorealistic detailed environment with sharp focused background, multiple people in frame, cinematic establishing shot composition, golden hour volumetric lighting, HDR cinematic lens, warm amber grading, masterpiece quality",
    negative: "cartoon skeleton, halloween decoration, flat 2D, anime, comic, x-ray medical, horror gore, neon, plastic toy, low quality, blurry, abstract, minimalist, sketch, painting, chibi, dia de los muertos, empty dark eye sockets, bare bones without transparent body, scary horror skeleton, torso only, bust shot, head and shoulders only, cropped at waist, isolated character on blank background, portrait crop, close-up, macro, extreme close-up, chest detail, upper body only, dark background, black background"
@@ -300,6 +305,12 @@ function getStyleSceneBodyRules(styleName) {
       objects: "All objects as low-poly geometric forms — boxy cars, yellow disc headlights, chrome bumpers, mailboxes, fire hydrants, street lamps. Every surface shows polygon edges and flat-shaded faces. Matte plastic quality like clay toys.",
       rendering: "Clean polygon edges on all surfaces, flat-shaded with no smoothing (signature faceted look). Soft ambient occlusion, gentle directional shadows, no outlines or cel-shading. Bright gradient sky, geometric cloud clusters. Vibrant saturated colors, warm and inviting."
     },
+    faceless_mannequin: {
+      characters: "EVERY character, protagonist and supporting cast alike, is a faceless white porcelain mannequin: a smooth featureless glossy head with NO eyes, nose or mouth, and white porcelain hands. Characters are told apart by wardrobe, hair or headwear, build and posture. Clothing is richly textured and accurate to the story's era and region. Elegant and dignified, never creepy. Characters are DOING something: holding, offering, examining, working. NO human skin or human faces anywhere in the frame.",
+      environments: "Period-accurate settings matched to the story's era and region — cottages, courts, workshops, markets, studies, orchards. Rich tactile materials: dark aged wood with visible grain, worn stone and plaster, brass and copper, leather, linen, parchment, wax candles. Lived-in and detailed, with foreground elements framing the edges and backgrounds that stay readable.",
+      objects: "Props rendered in tactile detail — patina on metal, grain in wood, weave in fabric, wear on edges. No readable text on any object.",
+      rendering: "Low-key chiaroscuro lit by practical sources (candles, oil lamps, firelight, a single window). Warm amber, tobacco and parchment tones over deep, rich blacks. Soft light falloff into shadow, gentle atmospheric haze. Crisp micro-contrast and razor-sharp texture on the subject, shallow depth of field. Exterior scenes keep the same palette and contrast under low golden or overcast light."
+    },
     skeleton_protagonist: {
       characters: "Protagonist in EVERY scene: photorealistic transparent skeleton with clear glass-like body shell, glossy ivory bones visible through translucent torso, big round expressive brown/amber EYEBALLS in skull sockets. MUST be shown according to director's notes — standing, sitting, kneeling, walking, running. Wears context-appropriate clothing. Must be DOING an action (holding objects, gesturing, interacting with people). Other characters are photorealistic normal humans shown alongside or interacting with the skeleton.",
       environments: "Photorealistic DETAILED real-world environments shown in SHARP FOCUS — NOT blurred bokeh backgrounds. Every scene has a specific location with visible architecture, landscape features, props, furniture, tools, weather effects. The skeleton exists INSIDE this world, not floating in front of it. Include foreground elements for depth.",
@@ -355,6 +366,22 @@ CONTINUITY: Each scene must contain a visual element that connects to the next s
 
 
   const instructions = {
+    faceless_mannequin: universalReinforcement + `
+**🕯️ FACELESS MANNEQUIN STYLE — CRITICAL RULES:**
+
+The character identity tag system will inject the mannequin description automatically. Do NOT write "Faceless mannequin" as a label or prefix in the prompt — describe the scene naturally.
+
+EVERY person in the scene is a faceless white porcelain mannequin: protagonist, companions, crowds and onlookers alike. No real human faces or human skin anywhere. Characters are distinguished by wardrobe, hair or headwear, build and posture.
+
+MANDATORY:
+- Describe the ENVIRONMENT first (era, place, materials, light sources), then place the mannequins within it, mid-action
+- Faces stay blank: NEVER describe eyes, gaze, smiles, frowns, tears or any facial expression. Emotion is carried by posture, gesture and light
+- Lighting: low-key chiaroscuro from practical sources (candles, oil lamps, firelight, a single window); exteriors under low golden or overcast light
+- Palette: warm amber, tobacco and parchment tones over deep rich blacks
+- Tactile period textures: aged wood grain, worn stone, brass and copper patina, leather, linen, parchment
+- The porcelain is elegant and dignified: never cracked, never creepy, never a shop-window display
+- NEVER show readable text, numbers or logos on any object`,
+
     skeleton_protagonist: universalReinforcement + `
 **🦴 SKELETON PROTAGONIST STYLE — ADDITIONAL RULES:**
 The protagonist in EVERY image prompt must be described as: "a photorealistic transparent skeleton with a clear glass-like semi-transparent humanoid body shell, glossy ivory bones visible through the translucent torso, big round expressive brown amber eyeballs in the skull sockets"
@@ -395,7 +422,7 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
 
 
   // For non-photorealistic styles, strip any photorealistic camera language that may have leaked in
-  const isPhotoStyle = ['cinematic_realistic', 'photorealistic_4k', 'skeleton_protagonist'].includes(visualStyle);
+  const isPhotoStyle = ['cinematic_realistic', 'photorealistic_4k', 'skeleton_protagonist', 'faceless_mannequin'].includes(visualStyle);
   if (!isPhotoStyle) {
     enhanced = enhanced.replace(/\b(shot on|ARRI|Alexa|Canon|Sony|Nikon|Panavision|anamorphic|DSLR|RAW)\b/gi, '');
     enhanced = enhanced.replace(/\b(Kodak|Vision3|film grain texture|chromatic aberration)\b/gi, '');
@@ -622,6 +649,14 @@ const handler: FnHandler = async (body, ctx) => {
         `3D whiteboard cartoon ${bodyDesc} shown full body with bold outlines, ${faceDesc}, flat color fills, normal proportions, warm peach-brown skin`,
      low_poly_3d_cartoon: (bodyDesc, faceDesc) =>
         `low-poly 3D ${bodyDesc} shown full body from flat-shaded polygons, ${faceDesc}, angular geometric features, matte clay-toy quality`,
+      faceless_mannequin: (bodyDesc, faceDesc) => {
+        // Blank porcelain head: keep hair and headwear, drop skin, eyes, nose, lips and facial hair
+        const hair = (faceDesc || '').split(',').map((s) => s.trim())
+          .filter((s) => /\b(hair|bob|bun|braids?|curls?|locs|afro|ponytail|wig|bald|headwrap|bonnet|turban|hat|cap|crown|veil|scarf)\b/i.test(s)
+            && !/\b(skin|eyes?|eyebrows?|brows?|nose|lips?|mouth|face|cheeks?|freckles?|scars?|beard|moustache|mustache)\b/i.test(s))
+          .join(', ');
+        return `a faceless white porcelain mannequin with a smooth featureless glossy head (no eyes, nose or mouth) and white porcelain hands, ${bodyDesc}${hair ? ', ' + hair : ''}, in richly textured period clothing, no human skin anywhere`;
+      },
       skeleton_protagonist: (bodyDesc, faceDesc) =>
         `photorealistic transparent skeleton with clear glass-like body shell shown full body in the scene, glossy ivory bones visible through translucent torso, big round expressive brown amber eyeballs in skull sockets, ${faceDesc}`
     };
@@ -685,7 +720,7 @@ const handler: FnHandler = async (body, ctx) => {
 
         // ── MINIMAL: silhouette only (wide shots — character is small in frame)
         // Just enough to recognize "that's our character" at a distance
-        const minimalDesc = `a ${bodyDesc}${hairShort ? ', ' + hairShort : ''}${clothing ? ', wearing ' + clothing.substring(0, 60) : ''}`;
+        const minimalDesc = `a ${visualStyle === 'faceless_mannequin' ? 'faceless white porcelain mannequin, ' : ''}${bodyDesc}${hairShort ? ', ' + hairShort : ''}${clothing ? ', wearing ' + clothing.substring(0, 60) : ''}`;
 
         // ── MODERATE: action-level (medium shots — body visible, face not dominant)
         // Body + hair + skin + clothing — no detailed facial features

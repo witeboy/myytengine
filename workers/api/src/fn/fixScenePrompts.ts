@@ -73,6 +73,14 @@ const styleCharacterRules = {
   "3d_whiteboard_cartoon": (b, f) => `3D whiteboard cartoon ${b} with bold outlines, ${f}, flat color fills, normal proportions, warm peach-brown skin`,
   low_poly_3d_cartoon: (b, f) => `low-poly 3D ${b} from flat-shaded polygons, ${f}, angular geometric features, matte clay-toy quality`,
   roblox: (b, f) => `Roblox-style 3D blocky ${b} with cube head, rectangular torso and limbs, simple 2D cartoon face (two round eyes, curved mouth) painted on the cube head, ${f}, bright flat-shaded colors, toy-like plastic matte finish, R15 avatar proportions`,
+  faceless_mannequin: (bodyDesc, faceDesc) => {
+    // Blank porcelain head: keep hair and headwear, drop skin, eyes, nose, lips and facial hair
+    const hair = (faceDesc || '').split(',').map((s) => s.trim())
+      .filter((s) => /\b(hair|bob|bun|braids?|curls?|locs|afro|ponytail|wig|bald|headwrap|bonnet|turban|hat|cap|crown|veil|scarf)\b/i.test(s)
+        && !/\b(skin|eyes?|eyebrows?|brows?|nose|lips?|mouth|face|cheeks?|freckles?|scars?|beard|moustache|mustache)\b/i.test(s))
+      .join(', ');
+    return `a faceless white porcelain mannequin with a smooth featureless glossy head (no eyes, nose or mouth) and white porcelain hands, ${bodyDesc}${hair ? ', ' + hair : ''}, in richly textured period clothing, no human skin anywhere`;
+  },
   skeleton_protagonist: () => `photorealistic transparent skeleton with clear glass-like body shell, glossy ivory bones visible through translucent torso, big round expressive brown amber eyeballs in skull sockets`
 };
 const defaultStyleTransform = (b, f) => `${b}, ${f}`;
@@ -85,6 +93,7 @@ function normalizeStyleKey(raw) {
   for (const k of keys) { if (n.includes(k) || k.includes(n)) return k; }
   if (n.includes('roblox')) return 'roblox';
   if (n.includes('skeleton')) return 'skeleton_protagonist';
+  if (n.includes('mannequin') || n.includes('faceless')) return 'faceless_mannequin';
   return 'cinematic_realistic';
 }
 
@@ -143,7 +152,7 @@ function cleanIdentityDesc(raw) {
 // ── Subject-type sanity check (Prompt Engine Rulebook) ──
 function subjectTypeSanityCheck(prompt) {
   const head = prompt.substring(0, 250).toLowerCase();
-  const humanIndicators = /\b(woman|man|person|figure|character|boy|girl|child|worker|doctor|soldier|officer|teacher|scientist|protagonist|narrator|skeleton|individual|people|crowd|group|couple|family|mother|father|husband|wife)\b/;
+  const humanIndicators = /\b(woman|man|person|figure|character|boy|girl|child|worker|doctor|soldier|officer|teacher|scientist|protagonist|narrator|skeleton|mannequin|individual|people|crowd|group|couple|family|mother|father|husband|wife)\b/;
   if (humanIndicators.test(head)) return { prompt, stripped: false };
 
   const humanOnlyTerms = [
@@ -415,7 +424,7 @@ const handler: FnHandler = async (body, ctx) => {
       const hairMatch = face.match(/\b([\w-]+\s+)?(hair|bob|ponytail|bun|braids?|curls?|locs|afro)\b[^,]*/i);
       const hairShort = hairMatch ? hairMatch[0].trim() : '';
 
-      const minimalDesc = `a ${bodyDesc}${hairShort ? ', ' + hairShort : ''}${clothing ? ', wearing ' + clothing.substring(0, 60) : ''}`;
+      const minimalDesc = `a ${visualStyle === 'faceless_mannequin' ? 'faceless white porcelain mannequin, ' : ''}${bodyDesc}${hairShort ? ', ' + hairShort : ''}${clothing ? ', wearing ' + clothing.substring(0, 60) : ''}`;
 
       let compactFaceMod = face;
       if (compactFaceMod.length > 100) {
