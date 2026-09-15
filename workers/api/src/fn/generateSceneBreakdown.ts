@@ -4,6 +4,13 @@
 // Prompt strings are copied byte-for-byte. Prove it: tools/verify-prompts.mjs
 
 import { HttpError } from '../lib/http';
+import {
+  duplicateSceneNumbers,
+  pacingMinutes,
+  phaseFirstNumbers,
+  phaseSubBatches,
+  subBatchDone,
+} from '../lib/breakdownPlan';
 import { anthropicFetch, geminiFetch, hasAiProvider } from '../lib/ai';
 import type { FnHandler } from '../types';
 import explainerSceneBreakdown from './explainerSceneBreakdown';
@@ -60,10 +67,10 @@ function extractJSON(rawText) {
 }
 
 // ── Gemini 1.5 Pro (primary) ────────────────────────────────────────────────
-async function callGemini(ctx, prompt, systemText, temperature = 0.7) {
+async function callGemini(ctx, prompt, systemText, temperature = 0.7, model = 'gemini-2.5-pro') {
   if (!(await hasAiProvider(ctx, 'gemini'))) throw new Error("Missing Gemini provider");
 
-  const response = await geminiFetch(ctx, '/v1beta/models/gemini-2.5-pro:generateContent', {
+  const response = await geminiFetch(ctx, `/v1beta/models/${model}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -152,8 +159,18 @@ async function callAI(ctx, prompt, temperature = 0.7) {
   }
 
   // Fallback to Claude Sonnet 3.5
-  const result = await callClaudeFallback(ctx, prompt, systemText, temperature);
-  console.log(`✅ Claude fallback succeeded`);
+  try {
+    const result = await callClaudeFallback(ctx, prompt, systemText, temperature);
+    console.log(`✅ Claude fallback succeeded`);
+    return result;
+  } catch (claudeErr) {
+    console.warn(`⚠️ Claude failed: ${claudeErr.message} — last resort Gemini Flash`);
+  }
+
+  // Last resort: the pro models have failed long answers upstream (502s, 100s timeouts)
+  // while Flash kept answering, so a breakdown still finishes instead of pausing.
+  const result = await callGemini(ctx, prompt, systemText, temperature, 'gemini-2.5-flash');
+  console.log(`✅ Gemini Flash fallback succeeded`);
   return result;
 }
 
@@ -1166,13 +1183,23 @@ const handler: FnHandler = async (body, ctx) => {
     }
 
     const wordCount = finalScript.split(/\s+/).filter(w => w.length > 0).length;
-    const durationMinutes = project.video_duration_minutes || Math.ceil(wordCount / 150);
+    let durationMinutes = project.video_duration_minutes || Math.ceil(wordCount / 150);
     const niche = project.niche || 'general';
     const rawStyle = project.visual_style || '';
     const visualStyle = normalizeStyleKey(rawStyle);
     const styleDirective = getStyleCharacterDirective(visualStyle);
 
     const isSleep = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
+
+    // Pace beats over the script's real length when the project length disagrees with it by
+    // 2x or more. Sleep projects keep theirs: their scene count is derived from it on purpose.
+    let durationNote = null;
+    if (!isSleep) {
+      const pacing = pacingMinutes(project.video_duration_minutes, wordCount);
+      durationMinutes = pacing.minutes;
+      durationNote = pacing.note;
+      if (durationNote) console.warn(`⚠️ ${durationNote}`);
+    }
 
     const sleepDensityAnchors = [{m:5,d:15},{m:10,d:20},{m:15,d:22},{m:20,d:25},{m:30,d:28},{m:60,d:32}];
 
@@ -1240,6 +1267,20 @@ const handler: FnHandler = async (body, ctx) => {
     const nicheProfile = getNicheDirectorProfile(niche);
 
     console.log(`🎯 ${durationMinutes}min → ${totalTargetScenes} scenes (avg ${avgSceneDuration.toFixed(1)}s) | ${numBatches} phases | Style: ${visualStyle || 'default'} | AI: Gemini→Claude`);
+
+    // A breakdown whose numbering is already broken must not be extended: more scenes on
+    // top only compound the damage. The page offers a rebuild instead.
+    const existingAtStart = await ctx.db.Scenes.filter({ project_id });
+    const duplicated = duplicateSceneNumbers(existingAtStart.map((s) => s.scene_number));
+    if (duplicated.length > 0) {
+      throw new HttpError(
+        409,
+        `This project's scenes are corrupted: ${duplicated.length} scene numbers appear more than once ` +
+          '(from overlapping breakdown runs). Rebuild the breakdown to fix it.',
+      );
+    }
+    // Scene numbers come from the phase plan, so re-running a batch recreates nothing.
+    const phaseFirsts = phaseFirstNumbers(scriptChunks);
 
     let blueprint;
     let freshProject = project;
@@ -1390,6 +1431,24 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
     const MAX_WALL_MS = 55000;
     const MAX_SCENES_PER_CALL = 10;
 
+    // A sub-batch whose AI call fails must not be skipped: that finished breakdowns with
+    // holes in the scene list. Save progress and resume this phase on the next call; the
+    // client gives up after a few calls that make no progress.
+    const pauseAfterAiFailure = async (batchIdx, created, message) => {
+      await ctx.db.Projects.update(project_id, {
+        scene_blueprint: `{"ready":true,"niche":"${niche}","ts":${totalTargetScenes},"sc":${created}}`
+      });
+      return {
+        success: true, done: false,
+        next_batch: batchIdx + 1,
+        scenes_created: created,
+        total_target: totalTargetScenes,
+        total_batches: numBatches + 1,
+        duration_note: durationNote,
+        ai_error: String(message || 'AI call failed').slice(0, 300)
+      };
+    };
+
     for (let batchIdx = phaseStart; batchIdx < scriptChunks.length; batchIdx++) {
       const elapsed = Date.now() - callStart;
       if (elapsed > MAX_WALL_MS && batchIdx > phaseStart) {
@@ -1402,7 +1461,8 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
           next_batch: batchIdx + 1,
           scenes_created: grandTotalCreated,
           total_target: totalTargetScenes,
-          total_batches: numBatches + 1
+          total_batches: numBatches + 1,
+          duration_note: durationNote
         };
       }
 
@@ -1414,7 +1474,8 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
       }
 
       const existingScenes = await ctx.db.Scenes.filter({ project_id });
-      const sceneOffset = existingScenes.length;
+      const existingNumbers = new Set(existingScenes.map((s) => s.scene_number));
+      const phaseFirst = phaseFirsts[batchIdx];
 
       const recentScenes = existingScenes
         .sort((a, b) => b.scene_number - a.scene_number)
@@ -1439,18 +1500,9 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
         continuityContext = `**LAST ${recentScenes.length} SCENES (for visual continuity — your first scene MUST connect to the last bridge element):**\n${lines.join('\n')}`;
       }
 
-      const subBatches = [];
       const chunkWords = currentChunk.text.split(/\s+/);
       const wordsPerScene = Math.max(1, Math.ceil(chunkWords.length / currentChunk.scenes));
-      let subRemaining = currentChunk.scenes;
-      let subOffset = sceneOffset;
-
-      while (subRemaining > 0) {
-        const count = Math.min(subRemaining, MAX_SCENES_PER_CALL);
-        subBatches.push({ offset: subOffset, count });
-        subOffset += count;
-        subRemaining -= count;
-      }
+      const subBatches = phaseSubBatches(phaseFirst, currentChunk.scenes, chunkWords.length, MAX_SCENES_PER_CALL);
 
       let phaseCreated = 0;
 
@@ -1459,11 +1511,27 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
 
         const elapsed2 = Date.now() - callStart;
         if (elapsed2 > MAX_WALL_MS && phaseCreated > 0) {
-          console.log(`⏱️ ${(elapsed2/1000).toFixed(1)}s — saving mid-phase progress`);
-          break;
+          console.log(`⏱️ ${(elapsed2/1000).toFixed(1)}s — saving mid-phase progress, this phase resumes next call`);
+          await ctx.db.Projects.update(project_id, {
+            scene_blueprint: `{"ready":true,"niche":"${niche}","ts":${totalTargetScenes},"sc":${grandTotalCreated + phaseCreated}}`
+          });
+          // Resume THIS phase next call. Moving on to the next phase here used to drop the
+          // rest of this one; its finished sub-batches are skipped when it resumes.
+          return {
+            success: true, done: false,
+            next_batch: batchIdx + 1,
+            scenes_created: grandTotalCreated + phaseCreated,
+            total_target: totalTargetScenes,
+            total_batches: numBatches + 1,
+            duration_note: durationNote
+          };
         }
 
-        const wordStart = (sub.offset - sceneOffset) * wordsPerScene;
+        if (subBatchDone(sub, existingNumbers)) {
+          console.log(`⏭️ Scenes ${sub.offset + 1}-${sub.offset + sub.count} already exist — skipping`);
+          continue;
+        }
+        const wordStart = (sub.offset - (phaseFirst - 1)) * wordsPerScene;
         const wordEnd = Math.min(wordStart + sub.count * wordsPerScene, chunkWords.length);
 
         if (wordStart >= chunkWords.length) {
@@ -1503,33 +1571,8 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
         try {
           result = await callAI(ctx, prompt, 0.7);
         } catch (err) {
-          console.error(`❌ Scenes ${sub.offset+1}-${sub.offset+sub.count} FAILED: ${err.message}`);
-          if (sub.count > 10) {
-            console.log(`🔄 Retrying with ${Math.ceil(sub.count/2)} scenes...`);
-            try {
-              const halfCount = Math.ceil(sub.count / 2);
-              const halfWordEnd = Math.min(wordStart + halfCount * wordsPerScene, chunkWords.length);
-              const halfText = chunkWords.slice(wordStart, halfWordEnd).join(' ');
-              const halfPrompt = buildBreakdownPrompt({
-                styleDirective, storyAnalysis, characterBlock, continuityContext,
-                phaseName: currentChunk.phase, phasePurpose: currentChunk.purpose,
-                sceneCount: halfCount,
-                sceneStart: sub.offset + 1,
-                scriptText: halfText,
-                beatDurationsSlice: subBeats.slice(0, halfCount),
-                nicheProfile,
-                cinemaPreset,
-                sceneStartGlobal: sub.offset + 1,
-                totalScenes: totalTargetScenes
-              });
-              result = await callAI(ctx, halfPrompt, 0.7);
-            } catch (retryErr) {
-              console.error(`❌ Retry also failed: ${retryErr.message} — skipping`);
-              continue;
-            }
-          } else {
-            continue;
-          }
+          console.error(`❌ Scenes ${sub.offset+1}-${sub.offset+sub.count} FAILED: ${err.message} — pausing, this phase resumes next call`);
+          return await pauseAfterAiFailure(batchIdx, grandTotalCreated + phaseCreated, err.message);
         }
 
         let scenesArr = result?.scenes;
@@ -1538,13 +1581,21 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
           if (Array.isArray(scenesArr)) {
             console.warn(`⚠️ Scenes found under non-standard key`);
           } else {
-            console.error(`❌ No scenes array in result. Keys: ${JSON.stringify(Object.keys(result || {}))}`);
-            continue;
+            const keys = JSON.stringify(Object.keys(result || {}));
+            console.error(`❌ No scenes array in result. Keys: ${keys} — pausing, this phase resumes next call`);
+            return await pauseAfterAiFailure(batchIdx, grandTotalCreated + phaseCreated, `AI answer had no scenes (keys: ${keys})`);
           }
         }
 
-        for (const scene of scenesArr) {
-          const sceneNum = sceneOffset + phaseCreated + 1;
+        // Another call may have written these scenes while the AI was working.
+        const freshNumbers = new Set((await ctx.db.Scenes.filter({ project_id })).map((s) => s.scene_number));
+        if (subBatchDone(sub, freshNumbers)) {
+          console.log(`⏭️ Scenes ${sub.offset + 1}-${sub.offset + sub.count} were written by another call — discarding this copy`);
+          continue;
+        }
+        let subCreated = 0;
+        for (const scene of scenesArr.slice(0, sub.count)) {
+          const sceneNum = sub.offset + subCreated + 1;
           const cleanedNarration = cleanNarrationText(scene.narration_text);
           const targetDuration = beatDurations[sceneNum - 1] || scene.duration_seconds || 5;
 
@@ -1606,6 +1657,7 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
           });
 
           phaseCreated++;
+          subCreated++;
         }
 
         if (si < subBatches.length - 1 && blueprint.scenes.length >= 3) {
@@ -1636,12 +1688,13 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
       total_target: totalTargetScenes,
       total_batches: numBatches,
       beat_durations: beatDurations,
-      beat_start_times: beatStartTimes
+      beat_start_times: beatStartTimes,
+      duration_note: durationNote
     };
 
   } catch (error) {
     console.error("❌ generateSceneBreakdown error:", error.message, error.stack);
-    throw new HttpError(500, error.message);
+    throw error instanceof HttpError ? error : new HttpError(500, error.message);
   }
 };
 

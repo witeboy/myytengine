@@ -17,12 +17,17 @@ import AudioMixerPanel from '@/components/content/AudioMixerPanel';
 import ProcessingNotifier from '@/components/content/ProcessingNotifier';
 import DedupButton from '@/components/content/DedupButton';
 import AutoBrollButton from '@/components/content/AutoBrollButton';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { toast } from '@/components/ui/use-toast';
 import { Link } from 'react-router-dom';
 import {
   Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film,
   Palette, Sparkles, Monitor, Clapperboard, Wand2, CheckCircle2,
   XCircle, Clock, Zap, Video, FolderDown, Mic, Music, Volume2, Home,
-  FileText, RefreshCw
+  FileText, RefreshCw, AlertTriangle
 } from 'lucide-react';
 import {
   resolveProjectMode,
@@ -470,6 +475,7 @@ export default function ContentGeneration() {
   const [exportProgress, setExportProgress] = useState({ current: 0, total: 0, label: '' });
   const [estimatedWordCount, setEstimatedWordCount] = useState(0);
   const [totalExpectedScenes, setTotalExpectedScenes] = useState(0);
+  const [confirmRebuild, setConfirmRebuild] = useState(false);
 
   const [imageProgress, setImageProgress] = useState({ current: 0, total: 0, sceneName: '' });
   const [videoProgress, setVideoProgress] = useState({ current: 0, total: 0, sceneName: '', phase: '', sceneStatuses: {} });
@@ -634,6 +640,145 @@ export default function ContentGeneration() {
   // ══════════════════════════════════════════════════════════════════
   // IMPORT — routes to the correct breakdown function per project type
   // ══════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════
+  // STANDARD BREAKDOWN LOOP — shared by Import and Resume.
+  // Every batch is idempotent on the server (fixed scene numbers, finished sub-batches
+  // skipped), so retrying is safe. What must not happen is re-sending a batch while the
+  // previous attempt is still running, or retrying forever.
+  // ═══════════════════════════════════════════════════════════════
+  const runStandardBreakdown = async (startBatch = 0) => {
+    const MAX_CONSECUTIVE_ERRORS = 6;
+    const MAX_STALLED_CALLS = 4;
+    let breakdownDone = false;
+    let nextBatch = startBatch;
+    let consecutiveErrors = 0;
+    let stalledCalls = 0;
+    let lastCount = -1;
+    let target = 0;
+    let noteShown = false;
+
+    const sceneCount = async () => {
+      const fresh = await api.entities.Scenes.filter({ project_id: projectId });
+      queryClient.setQueryData(['scenes', projectId], fresh.sort((a, b) => a.scene_number - b.scene_number));
+      return fresh.length;
+    };
+
+    // After a gateway timeout the Worker is usually still running. Wait until scene
+    // creation goes quiet before re-sending, so two copies never run side by side.
+    const waitForQuiet = async () => {
+      let previous = await sceneCount();
+      for (let i = 0; i < 12; i++) {
+        await new Promise(r => setTimeout(r, 10000));
+        const now = await sceneCount();
+        setImportProgress(`Waiting for the previous batch to finish... ${now} scenes so far`);
+        if (now === previous) return;
+        previous = now;
+      }
+    };
+
+    const giveUp = async (reason) => {
+      const count = await sceneCount();
+      throw new Error(`${reason} (${count}${target ? `/${target}` : ''} scenes). Use "Resume breakdown" to continue from where it stopped.`);
+    };
+
+    while (!breakdownDone) {
+      try {
+        if (nextBatch > startBatch) {
+          const delay = nextBatch === 1 ? 8000 : 3000;
+          await new Promise(r => setTimeout(r, delay));
+        }
+
+        const bdResult = await api.functions.invoke('generateSceneBreakdown', {
+          project_id: projectId,
+          batch_index: nextBatch
+        });
+        const bdData = bdResult.data || bdResult;
+        consecutiveErrors = 0;
+        breakdownDone = bdData.done === true;
+        nextBatch = bdData.next_batch ?? (nextBatch + 1);
+
+        if (bdData.duration_note && !noteShown) {
+          noteShown = true;
+          toast({ title: 'Scene timing adjusted', description: bdData.duration_note, duration: 10000 });
+        }
+
+        const count = await sceneCount();
+        target = bdData.total_target || target || count;
+        setTotalExpectedScenes(target);
+        setImportProgress(`Breaking down script... ${count}/${target} scenes created`);
+
+        if (!breakdownDone) {
+          stalledCalls = count === lastCount ? stalledCalls + 1 : 0;
+          if (bdData.ai_error) setImportProgress(`AI provider error, retrying... ${count}/${target} scenes created`);
+          // Each failed AI call already took minutes on the server, so stop sooner.
+          if (stalledCalls >= (bdData.ai_error ? 2 : MAX_STALLED_CALLS)) {
+            await giveUp(bdData.ai_error ? `The AI provider kept failing: ${bdData.ai_error}` : 'Breakdown stopped making progress');
+          }
+        }
+        lastCount = count;
+      } catch (err) {
+        const status = err?.response?.status || err?.status;
+        const errMsg = err?.response?.data?.error || '';
+        if (status === 409) throw new Error(errMsg || 'Scenes are corrupted. Rebuild the breakdown.');
+        if (status === 400 && errMsg.includes('Story analysis not found')) { nextBatch = 0; continue; }
+        const retryable = (status === 400 && errMsg.includes('blueprint')) || status === 500 || status === 502 || status === 504;
+        if (!retryable) throw err;
+        consecutiveErrors++;
+        if (consecutiveErrors > MAX_CONSECUTIVE_ERRORS) await giveUp('Breakdown stopped after repeated server errors');
+        if (status === 504) {
+          await waitForQuiet();
+        } else {
+          const wait = status === 400 ? 5000 : 8000;
+          console.log(`Breakdown batch ${nextBatch}: HTTP ${status}, retrying in ${wait / 1000}s (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS})`);
+          await new Promise(r => setTimeout(r, wait));
+        }
+      }
+    }
+  };
+
+  const handleResumeBreakdown = async () => {
+    setImporting(true);
+    setImportPhase('breakdown');
+    try {
+      setImportProgress('Resuming breakdown. Finished scenes are kept...');
+      // Batch 1 reuses the saved story analysis; finished phases are skipped server-side.
+      await runStandardBreakdown(1);
+      setImportPhase('prompts');
+      await runPromptGeneration({ onProgress: setImportProgress });
+    } catch (err) {
+      console.error('Resume breakdown failed:', err);
+      setImportProgress(`❌ ${err.message}`);
+      await new Promise(r => setTimeout(r, 6000));
+    } finally {
+      await refetchScenes();
+      await refetchProject();
+      setImporting(false);
+      setImportPhase('');
+      setImportProgress('');
+    }
+  };
+
+  const handleRebuildBreakdown = async () => {
+    setConfirmRebuild(false);
+    setImporting(true);
+    setImportPhase('breakdown');
+    try {
+      const existing = await api.entities.Scenes.filter({ project_id: projectId });
+      for (let i = 0; i < existing.length; i++) {
+        setImportProgress(`Removing old scenes... ${i + 1}/${existing.length}`);
+        await api.entities.Scenes.delete(existing[i].id);
+      }
+      await refetchScenes();
+    } catch (err) {
+      setImportProgress(`❌ Could not remove old scenes: ${err.message}`);
+      await new Promise(r => setTimeout(r, 6000));
+      setImporting(false); setImportPhase(''); setImportProgress('');
+      return;
+    }
+    setImporting(false);
+    await handleImport();
+  };
+
   const handleImport = async () => {
     setImporting(true);
 
@@ -898,53 +1043,7 @@ export default function ContentGeneration() {
 
         setImportProgress('Analyzing script & breaking down into cinematic scenes...');
 
-        let breakdownDone = false;
-        let nextBatch = 0;
-
-        while (!breakdownDone) {
-          try {
-            if (nextBatch > 0) {
-              const delay = nextBatch === 1 ? 8000 : 3000;
-              await new Promise(r => setTimeout(r, delay));
-            }
-
-            const bdResult = await api.functions.invoke('generateSceneBreakdown', {
-              project_id: projectId,
-              batch_index: nextBatch
-            });
-            const bdData = bdResult.data || bdResult;
-            breakdownDone = bdData.done === true;
-            nextBatch = bdData.next_batch ?? (nextBatch + 1);
-
-            const freshScenes = await api.entities.Scenes.filter({ project_id: projectId });
-            queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
-
-            const target = bdData.total_target || freshScenes.length;
-            setTotalExpectedScenes(target);
-            setImportProgress(`Breaking down script... ${freshScenes.length}/${target} scenes created`);
-          } catch (err) {
-            const status = err?.response?.status || err?.status;
-            const errMsg = err?.response?.data?.error || '';
-            if (status === 400 && errMsg.includes('blueprint')) {
-              console.log(`Blueprint not ready yet, retrying batch ${nextBatch} in 5s...`);
-              await new Promise(r => setTimeout(r, 5000));
-              continue;
-            }
-            if (status === 500 || status === 502) {
-              console.log(`Server error on batch ${nextBatch}, retrying in 8s...`);
-              await new Promise(r => setTimeout(r, 8000));
-              continue;
-            }
-            if (status === 504) {
-              await new Promise(r => setTimeout(r, 8000));
-              const freshScenes = await api.entities.Scenes.filter({ project_id: projectId });
-              queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
-              setImportProgress(`Recovering from timeout... ${freshScenes.length} scenes so far`);
-              continue;
-            }
-            throw err;
-          }
-        }
+        await runStandardBreakdown(0);
 
         await refetchScenes();
 
@@ -1456,6 +1555,34 @@ export default function ContentGeneration() {
   const resolvedUiMode = resolveProjectMode(project, null).mode;
   const isShortsProject = isShortsModeFn(resolvedUiMode);
 
+  // Breakdown integrity (standard projects). Duplicated scene numbers mean overlapping
+  // runs corrupted the breakdown; far fewer scenes than planned means it stopped part-way.
+  const breakdownIssue = (() => {
+    if (!project || scenes.length === 0) return null;
+    if (isShortsProject || isSleepModeFn(resolvedUiMode) || isExplainerModeFn(resolvedUiMode) || isLongViralModeFn(resolvedUiMode)) return null;
+    const counts = {};
+    for (const s of scenes) counts[s.scene_number] = (counts[s.scene_number] || 0) + 1;
+    const duplicated = Object.values(counts).filter(c => c > 1).length;
+    if (duplicated > 0) {
+      return {
+        kind: 'corrupted',
+        title: `Scene breakdown is corrupted: ${duplicated} scene numbers appear twice`,
+        detail: 'Two breakdown runs overlapped, so parts of the script are duplicated, out of order or missing, and AutoSync cannot time these scenes correctly. Rebuild the breakdown to fix it.',
+      };
+    }
+    let planned = 0;
+    try { planned = JSON.parse(project.scene_blueprint || '{}').ts || 0; } catch (_) { planned = 0; }
+    // The AI sometimes returns a scene or two fewer than asked; only flag a real shortfall.
+    if (planned - scenes.length > Math.max(3, Math.round(planned * 0.05))) {
+      return {
+        kind: 'incomplete',
+        title: `Scene breakdown stopped part-way: ${scenes.length} of ${planned} scenes`,
+        detail: 'Part of the script has no scenes yet. Resume to create the rest; finished scenes are kept.',
+      };
+    }
+    return null;
+  })();
+
   const videoStatusCounts = videoProgress.sceneStatuses ? {
     queued: Object.values(videoProgress.sceneStatuses).filter(s => s === 'queued').length,
     submitting: Object.values(videoProgress.sceneStatuses).filter(s => s === 'submitting').length,
@@ -1751,6 +1878,44 @@ export default function ContentGeneration() {
             </div>
           </div>
         )}
+
+        {/* ── Breakdown integrity: incomplete or corrupted scene breakdowns ── */}
+        {breakdownIssue && !importing && (
+          <div className={`p-4 rounded-lg border mb-6 flex flex-wrap items-center gap-3 ${breakdownIssue.kind === 'corrupted' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
+            <AlertTriangle className={`w-5 h-5 flex-shrink-0 ${breakdownIssue.kind === 'corrupted' ? 'text-red-600' : 'text-amber-600'}`} />
+            <div className="flex-1 min-w-[240px]">
+              <p className="font-medium text-sm">{breakdownIssue.title}</p>
+              <p className="text-xs text-gray-600">{breakdownIssue.detail}</p>
+            </div>
+            {breakdownIssue.kind === 'incomplete' && (
+              <Button size="sm" onClick={handleResumeBreakdown} className="bg-amber-600 hover:bg-amber-700">
+                <RefreshCw className="w-4 h-4 mr-1" /> Resume breakdown
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={() => setConfirmRebuild(true)} className={breakdownIssue.kind === 'corrupted' ? 'border-red-300 text-red-700 hover:bg-red-100' : ''}>
+              Rebuild breakdown
+            </Button>
+          </div>
+        )}
+
+        <AlertDialog open={confirmRebuild} onOpenChange={setConfirmRebuild}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Rebuild the scene breakdown?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This deletes all {scenes.length} scenes and generates them again from the script.
+                {imageCount > 0 || videoCount > 0 ? ` ${imageCount} generated images and ${videoCount} animations will no longer be attached to this project.` : ''}
+                {' '}This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleRebuildBreakdown} className="bg-red-600 hover:bg-red-700">
+                Delete scenes and rebuild
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Action Bar */}
         <div className="bg-white p-4 rounded-lg shadow-sm border mb-6 flex flex-wrap items-center gap-3">
