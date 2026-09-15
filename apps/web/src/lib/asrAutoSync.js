@@ -67,6 +67,17 @@ function getSceneWords(scene) {
   return text.split(/\s+/).filter(Boolean);
 }
 
+// A scene's start is trusted only when the script word after it is heard right after it.
+function anchorConfirmed(scriptWords, si, asrWords, ai) {
+  let j = si + 1;
+  while (j < scriptWords.length && isTransparentToken(scriptWords[j])) j++;
+  if (j >= scriptWords.length) return true; // one-word scene
+  for (let k = 1; k <= 2; k++) {
+    if (ai + k < asrWords.length && wordsMatch(scriptWords[j], asrWords[ai + k].word)) return true;
+  }
+  return false;
+}
+
 export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
   if (!asrWords?.length || !scenes?.length) return [];
 
@@ -125,6 +136,30 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
         continue;
       }
 
+      // Anchor the scene's start before anything else. A lone loose match on a common
+      // word ("the", "and") far ahead used to be accepted here, jumping the cursor past
+      // the scene and failing every later scene with it. A start now needs two
+      // consecutive heard words, and may land on any of the scene's first four words so a
+      // misheard opening word does not sink the whole scene.
+      if (firstMatchedAsrIdx === -1) {
+        let anchored = false;
+        for (let s = 0; s <= 3 && scriptIdx + s < scriptWords.length; s++) {
+          const candidate = scriptWords[scriptIdx + s];
+          if (isTransparentToken(candidate)) continue;
+          if (wordsMatch(candidate, asrW) && anchorConfirmed(scriptWords, scriptIdx + s, asrWords, asrIdx)) {
+            scriptIdx += s + 1;
+            firstMatchedAsrIdx = asrIdx;
+            lastMatchedAsrIdx = asrIdx;
+            matchedCount++;
+            localAsrIdx++;
+            anchored = true;
+            break;
+          }
+        }
+        if (!anchored) localAsrIdx++;
+        continue;
+      }
+
       if (wordsMatch(scriptW, asrW)) {
         if (firstMatchedAsrIdx === -1) firstMatchedAsrIdx = asrIdx;
         lastMatchedAsrIdx = asrIdx;
@@ -177,7 +212,25 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
       // CRITICAL: advance cursor by estimated word count so the next scene
       // doesn't scan over the same ASR region this scene failed to match
       const estimatedWordsConsumed = Math.max(1, Math.floor(scriptWords.length * 0.8));
-      asrCursor = Math.min(asrWords.length, asrCursor + estimatedWordsConsumed);
+      let nextCursor = asrCursor + estimatedWordsConsumed;
+      // ...but never past where one of the next few scenes can already be heard. Spoken
+      // numbers come back as one digit token ("One thousand two hundred and two" -> "1,202"),
+      // so a word-count estimate overshoots them and used to skip the following scene too.
+      const lookaheadEnd = Math.min(asrWords.length - 1, nextCursor + 40);
+      for (let ahead = si + 1, seen = 0; ahead < scenes.length && seen < 3; ahead++) {
+        const nextWords = sceneScriptWords[ahead];
+        if (!nextWords.length) continue;
+        seen++;
+        let found = -1;
+        for (let a = asrCursor; a <= lookaheadEnd && found < 0; a++) {
+          for (let s = 0; s <= 3 && s < nextWords.length; s++) {
+            if (isTransparentToken(nextWords[s])) continue;
+            if (wordsMatch(nextWords[s], asrWords[a].word) && anchorConfirmed(nextWords, s, asrWords, a)) { found = a; break; }
+          }
+        }
+        if (found >= 0) { nextCursor = Math.min(nextCursor, found); break; }
+      }
+      asrCursor = Math.min(asrWords.length, nextCursor);
       sceneMatches.push({ firstAsrIdx: -1, lastAsrIdx: -1, matchedCount: 0, empty: false, fallback: true });
       continue;
     }

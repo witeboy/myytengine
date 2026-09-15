@@ -1,0 +1,702 @@
+{
+ "note": "Opening 14 sentences of a real narration script and the first 136 words Workers AI (Deepgram nova-3) transcribed from its AI33 voiceover. Used by asrAutoSync.test.js.",
+ "sentences": [
+  "July twentieth, nineteen sixty-nine.",
+  "Three hundred eighty-four thousand kilometers from home.",
+  "Neil Armstrong is piloting the lunar module toward the surface of the Moon.",
+  "And then the computer starts screaming.",
+  "One thousand two hundred and one.",
+  "One thousand two hundred and two.",
+  "Alarm codes flashing across the display.",
+  "The guidance system that's supposed to be navigating humanity's first lunar landing is drowning in its own workload.",
+  "This is the moment.",
+  "The culmination of a decade of work, a hundred billion dollars in today's money, the hopes of an entire nation riding on a machine that had less computing power than the calculator you probably threw away in middle school.",
+  "Sixty-four kilobytes of memory.",
+  "Seventy-four kilobytes if you're being generous with the read-only storage.",
+  "A processor running at point zero four three megahertz.",
+  "Not four gigahertz."
+ ],
+ "duration": 60.12,
+ "words": [
+  {
+   "word": "07/20/1969",
+   "start": 0.08,
+   "end": 2.8
+  },
+  {
+   "word": "384,000",
+   "start": 2.96,
+   "end": 4.48
+  },
+  {
+   "word": "kilometers",
+   "start": 4.48,
+   "end": 5.04
+  },
+  {
+   "word": "from",
+   "start": 5.04,
+   "end": 5.28
+  },
+  {
+   "word": "home",
+   "start": 5.28,
+   "end": 5.84
+  },
+  {
+   "word": "neil",
+   "start": 6,
+   "end": 6.32
+  },
+  {
+   "word": "armstrong",
+   "start": 6.32,
+   "end": 6.88
+  },
+  {
+   "word": "is",
+   "start": 6.88,
+   "end": 7.12
+  },
+  {
+   "word": "piloting",
+   "start": 7.12,
+   "end": 7.52
+  },
+  {
+   "word": "the",
+   "start": 7.52,
+   "end": 7.76
+  },
+  {
+   "word": "lunar",
+   "start": 7.76,
+   "end": 8.16
+  },
+  {
+   "word": "module",
+   "start": 8.16,
+   "end": 8.56
+  },
+  {
+   "word": "toward",
+   "start": 8.56,
+   "end": 8.88
+  },
+  {
+   "word": "the",
+   "start": 8.88,
+   "end": 9.04
+  },
+  {
+   "word": "surface",
+   "start": 9.04,
+   "end": 9.36
+  },
+  {
+   "word": "of",
+   "start": 9.36,
+   "end": 9.52
+  },
+  {
+   "word": "the",
+   "start": 9.52,
+   "end": 9.68
+  },
+  {
+   "word": "moon",
+   "start": 9.68,
+   "end": 10.16
+  },
+  {
+   "word": "and",
+   "start": 10.16,
+   "end": 10.48
+  },
+  {
+   "word": "then",
+   "start": 10.48,
+   "end": 10.72
+  },
+  {
+   "word": "the",
+   "start": 10.72,
+   "end": 10.88
+  },
+  {
+   "word": "computer",
+   "start": 10.88,
+   "end": 11.28
+  },
+  {
+   "word": "starts",
+   "start": 11.28,
+   "end": 11.68
+  },
+  {
+   "word": "screaming",
+   "start": 11.68,
+   "end": 12.4
+  },
+  {
+   "word": "1,201",
+   "start": 12.64,
+   "end": 14.32
+  },
+  {
+   "word": "1,202",
+   "start": 14.835,
+   "end": 16.835
+  },
+  {
+   "word": "alarm",
+   "start": 16.995,
+   "end": 17.395
+  },
+  {
+   "word": "codes",
+   "start": 17.395,
+   "end": 17.715
+  },
+  {
+   "word": "flashing",
+   "start": 17.715,
+   "end": 18.195
+  },
+  {
+   "word": "across",
+   "start": 18.195,
+   "end": 18.595
+  },
+  {
+   "word": "the",
+   "start": 18.595,
+   "end": 18.755
+  },
+  {
+   "word": "display",
+   "start": 18.755,
+   "end": 19.475
+  },
+  {
+   "word": "the",
+   "start": 19.955,
+   "end": 20.195
+  },
+  {
+   "word": "guidance",
+   "start": 20.195,
+   "end": 20.595
+  },
+  {
+   "word": "system",
+   "start": 20.595,
+   "end": 20.915
+  },
+  {
+   "word": "that's",
+   "start": 20.915,
+   "end": 21.315
+  },
+  {
+   "word": "supposed",
+   "start": 21.315,
+   "end": 21.555
+  },
+  {
+   "word": "to",
+   "start": 21.555,
+   "end": 21.635
+  },
+  {
+   "word": "be",
+   "start": 21.635,
+   "end": 21.795
+  },
+  {
+   "word": "navigating",
+   "start": 21.795,
+   "end": 22.355
+  },
+  {
+   "word": "humanity's",
+   "start": 22.355,
+   "end": 22.995
+  },
+  {
+   "word": "first",
+   "start": 22.995,
+   "end": 23.315
+  },
+  {
+   "word": "lunar",
+   "start": 23.315,
+   "end": 23.715
+  },
+  {
+   "word": "landing",
+   "start": 23.715,
+   "end": 24.355
+  },
+  {
+   "word": "is",
+   "start": 24.355,
+   "end": 24.675
+  },
+  {
+   "word": "drowning",
+   "start": 24.675,
+   "end": 25.075
+  },
+  {
+   "word": "in",
+   "start": 25.075,
+   "end": 25.235
+  },
+  {
+   "word": "its",
+   "start": 25.235,
+   "end": 25.475
+  },
+  {
+   "word": "own",
+   "start": 25.475,
+   "end": 25.635
+  },
+  {
+   "word": "workload",
+   "start": 25.635,
+   "end": 26.435
+  },
+  {
+   "word": "this",
+   "start": 26.595,
+   "end": 26.915
+  },
+  {
+   "word": "is",
+   "start": 26.915,
+   "end": 27.155
+  },
+  {
+   "word": "the",
+   "start": 27.155,
+   "end": 27.315
+  },
+  {
+   "word": "moment",
+   "start": 27.315,
+   "end": 27.555
+  },
+  {
+   "word": "the",
+   "start": 27.92,
+   "end": 28.24
+  },
+  {
+   "word": "culmination",
+   "start": 28.24,
+   "end": 28.8
+  },
+  {
+   "word": "of",
+   "start": 28.8,
+   "end": 28.96
+  },
+  {
+   "word": "a",
+   "start": 28.96,
+   "end": 29.12
+  },
+  {
+   "word": "decade",
+   "start": 29.12,
+   "end": 29.44
+  },
+  {
+   "word": "of",
+   "start": 29.44,
+   "end": 29.6
+  },
+  {
+   "word": "work",
+   "start": 29.6,
+   "end": 30.16
+  },
+  {
+   "word": "a",
+   "start": 30.32,
+   "end": 30.48
+  },
+  {
+   "word": "$100,000,000,000",
+   "start": 30.48,
+   "end": 31.52
+  },
+  {
+   "word": "in",
+   "start": 31.52,
+   "end": 31.76
+  },
+  {
+   "word": "today's",
+   "start": 31.76,
+   "end": 32.16
+  },
+  {
+   "word": "money",
+   "start": 32.16,
+   "end": 32.72
+  },
+  {
+   "word": "the",
+   "start": 32.88,
+   "end": 33.04
+  },
+  {
+   "word": "hopes",
+   "start": 33.04,
+   "end": 33.28
+  },
+  {
+   "word": "of",
+   "start": 33.28,
+   "end": 33.52
+  },
+  {
+   "word": "an",
+   "start": 33.52,
+   "end": 33.68
+  },
+  {
+   "word": "entire",
+   "start": 33.68,
+   "end": 34.08
+  },
+  {
+   "word": "nation",
+   "start": 34.08,
+   "end": 34.4
+  },
+  {
+   "word": "riding",
+   "start": 34.4,
+   "end": 34.8
+  },
+  {
+   "word": "on",
+   "start": 34.8,
+   "end": 34.96
+  },
+  {
+   "word": "a",
+   "start": 34.96,
+   "end": 35.12
+  },
+  {
+   "word": "machine",
+   "start": 35.12,
+   "end": 35.68
+  },
+  {
+   "word": "that",
+   "start": 35.68,
+   "end": 35.92
+  },
+  {
+   "word": "had",
+   "start": 35.92,
+   "end": 36.16
+  },
+  {
+   "word": "less",
+   "start": 36.16,
+   "end": 36.48
+  },
+  {
+   "word": "computing",
+   "start": 36.48,
+   "end": 36.96
+  },
+  {
+   "word": "power",
+   "start": 36.96,
+   "end": 37.2
+  },
+  {
+   "word": "than",
+   "start": 37.2,
+   "end": 37.44
+  },
+  {
+   "word": "the",
+   "start": 37.44,
+   "end": 37.6
+  },
+  {
+   "word": "calculator",
+   "start": 37.6,
+   "end": 38.08
+  },
+  {
+   "word": "you",
+   "start": 38.08,
+   "end": 38.4
+  },
+  {
+   "word": "probably",
+   "start": 38.4,
+   "end": 38.8
+  },
+  {
+   "word": "threw",
+   "start": 38.8,
+   "end": 39.04
+  },
+  {
+   "word": "away",
+   "start": 39.04,
+   "end": 39.36
+  },
+  {
+   "word": "in",
+   "start": 39.36,
+   "end": 39.52
+  },
+  {
+   "word": "middle",
+   "start": 39.52,
+   "end": 39.76
+  },
+  {
+   "word": "school",
+   "start": 39.76,
+   "end": 40.4
+  },
+  {
+   "word": "64",
+   "start": 40.8,
+   "end": 41.44
+  },
+  {
+   "word": "kilobytes",
+   "start": 41.44,
+   "end": 42
+  },
+  {
+   "word": "of",
+   "start": 42,
+   "end": 42.16
+  },
+  {
+   "word": "memory",
+   "start": 42.16,
+   "end": 42.48
+  },
+  {
+   "word": "74",
+   "start": 42.925,
+   "end": 43.645
+  },
+  {
+   "word": "kilobytes",
+   "start": 43.645,
+   "end": 44.205
+  },
+  {
+   "word": "if",
+   "start": 44.205,
+   "end": 44.365
+  },
+  {
+   "word": "you're",
+   "start": 44.365,
+   "end": 44.605
+  },
+  {
+   "word": "being",
+   "start": 44.605,
+   "end": 44.765
+  },
+  {
+   "word": "generous",
+   "start": 44.765,
+   "end": 45.165
+  },
+  {
+   "word": "with",
+   "start": 45.165,
+   "end": 45.325
+  },
+  {
+   "word": "the",
+   "start": 45.325,
+   "end": 45.485
+  },
+  {
+   "word": "read",
+   "start": 45.485,
+   "end": 45.725
+  },
+  {
+   "word": "only",
+   "start": 45.725,
+   "end": 45.965
+  },
+  {
+   "word": "storage",
+   "start": 45.965,
+   "end": 46.685
+  },
+  {
+   "word": "a",
+   "start": 46.925,
+   "end": 47.085
+  },
+  {
+   "word": "processor",
+   "start": 47.085,
+   "end": 47.565
+  },
+  {
+   "word": "running",
+   "start": 47.565,
+   "end": 47.885
+  },
+  {
+   "word": "at",
+   "start": 47.885,
+   "end": 48.045
+  },
+  {
+   "word": "point",
+   "start": 48.045,
+   "end": 48.365
+  },
+  {
+   "word": "zero",
+   "start": 48.365,
+   "end": 48.685
+  },
+  {
+   "word": "four",
+   "start": 48.685,
+   "end": 49.005
+  },
+  {
+   "word": "three",
+   "start": 49.005,
+   "end": 49.245
+  },
+  {
+   "word": "megahertz",
+   "start": 49.245,
+   "end": 50.125
+  },
+  {
+   "word": "not",
+   "start": 50.285,
+   "end": 50.525
+  },
+  {
+   "word": "four",
+   "start": 50.525,
+   "end": 50.765
+  },
+  {
+   "word": "gigahertz",
+   "start": 50.765,
+   "end": 51.645
+  },
+  {
+   "word": "not",
+   "start": 51.805,
+   "end": 51.965
+  },
+  {
+   "word": "400",
+   "start": 51.965,
+   "end": 52.605
+  },
+  {
+   "word": "megahertz",
+   "start": 52.605,
+   "end": 53.485
+  },
+  {
+   "word": "point",
+   "start": 53.645,
+   "end": 53.965
+  },
+  {
+   "word": "zero",
+   "start": 53.965,
+   "end": 54.285
+  },
+  {
+   "word": "four",
+   "start": 54.285,
+   "end": 54.605
+  },
+  {
+   "word": "three",
+   "start": 54.605,
+   "end": 54.925
+  },
+  {
+   "word": "your",
+   "start": 55.48,
+   "end": 55.8
+  },
+  {
+   "word": "smartphone",
+   "start": 55.8,
+   "end": 56.2
+  },
+  {
+   "word": "is",
+   "start": 56.2,
+   "end": 56.52
+  },
+  {
+   "word": "literally",
+   "start": 56.52,
+   "end": 56.92
+  },
+  {
+   "word": "a",
+   "start": 56.92,
+   "end": 57.16
+  },
+  {
+   "word": "100,000",
+   "start": 57.16,
+   "end": 57.88
+  },
+  {
+   "word": "times",
+   "start": 57.88,
+   "end": 58.28
+  },
+  {
+   "word": "more",
+   "start": 58.28,
+   "end": 58.6
+  },
+  {
+   "word": "powerful",
+   "start": 58.6,
+   "end": 59.24
+  },
+  {
+   "word": "than",
+   "start": 59.24,
+   "end": 59.56
+  },
+  {
+   "word": "the",
+   "start": 59.56,
+   "end": 59.72
+  }
+ ]
+}
