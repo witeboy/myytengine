@@ -170,7 +170,7 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
   const pollRef = useRef(null);
 
   const hasPendingTask = (
-    (scene.video_url?.startsWith('grok_vid_task:') || scene.video_url?.startsWith('veo_task:')) &&
+    (scene.video_url?.startsWith('seedance_task:') || scene.video_url?.startsWith('grok_vid_task:') || scene.video_url?.startsWith('veo_task:')) &&
     scene.status !== 'failed' && scene.status !== 'video_failed'
   );
 

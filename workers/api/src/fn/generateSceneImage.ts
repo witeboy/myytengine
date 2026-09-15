@@ -181,7 +181,8 @@ function preparePromptForProvider(rawPrompt, provider = 'grok', isSleep = false)
   // Grok: 1500 chars (was 1200 — too aggressive, was cutting style suffixes)
   // Seedream: 4000 chars
   // Nano: 1500 chars
-  const maxChars = provider === 'seedream' ? SEEDREAM_MAX_PROMPT_CHARS : 1500;
+  // Nano Banana 2 Lite: 4000 chars (the model accepts 20,000)
+  const maxChars = provider === 'seedream' || provider === 'nano_banana_2_lite' ? SEEDREAM_MAX_PROMPT_CHARS : 1500;
 
   if (p.length > maxChars) {
     // Smart truncation: find last sentence boundary before the cap
@@ -232,7 +233,7 @@ async function processScene(ctx, scene, project, kieApiKey, aspectRatio, referen
   }
 
   // Skip if already generated or already pending
-  if (scene.status === 'image_generated' && scene.image_url && !scene.image_url.startsWith('seedream_task:') && !scene.image_url.startsWith('grok_img_task:') && !scene.image_url.startsWith('nano_task:')) {
+  if (scene.status === 'image_generated' && scene.image_url && !scene.image_url.startsWith('seedream_task:') && !scene.image_url.startsWith('grok_img_task:') && !scene.image_url.startsWith('nano_task:') && !scene.image_url.startsWith('nb2lite_task:')) {
     return { scene_id: scene.id, scene_number: sceneNum, status: 'skipped', reason: 'already_generated' };
   }
   if (scene.status === 'image_pending') {
@@ -291,13 +292,15 @@ async function processScene(ctx, scene, project, kieApiKey, aspectRatio, referen
   let providers;
 
   if (providerPref === 'auto') {
-    // Default cascade: Seedream → Grok → Nano.
+    // Default cascade: Nano Banana 2 Lite → Grok → Nano. Chosen in the 2026-09-15 model
+    // bake-off: best adherence to the style prompts at $0.02, with up to 10 reference
+    // images. Seedream is left out of the default because KIE rejects 'seedream-4.5'.
     providers = isSleepProject
-      ? ['seedream', 'nano_banana', 'grok']
-      : ['seedream', 'grok', 'nano_banana'];
+      ? ['nano_banana_2_lite', 'nano_banana', 'grok']
+      : ['nano_banana_2_lite', 'grok', 'nano_banana'];
   } else {
     // User explicitly picked a provider — use it FIRST, then fallback to others
-    const allProviders = ['seedream', 'grok', 'nano_banana'];
+    const allProviders = ['nano_banana_2_lite', 'seedream', 'grok', 'nano_banana'];
     providers = [providerPref, ...allProviders.filter(p => p !== providerPref)];
     // Filter out unavailable providers
     providers = providers.filter(p => {
@@ -333,6 +336,14 @@ async function processScene(ctx, scene, project, kieApiKey, aspectRatio, referen
       if (provider === 'seedream') {
         taskId = await submitSeedream(kieApiKey, providerPrompt, aspectRatio);
         taskPrefix = 'seedream_task';
+      } else if (provider === 'nano_banana_2_lite') {
+        // Same price with or without references; the reference keeps the character consistent
+        taskId = await kieCreateTask(kieApiKey, "nano-banana-2-lite", {
+          prompt: providerPrompt,
+          aspect_ratio: aspectRatio,
+          ...(useReference ? { image_urls: [referenceImageUrl] } : {})
+        });
+        taskPrefix = 'nb2lite_task';
       } else if (provider === 'grok') {
         if (useReference) {
           // Use image-to-image model with reference for character consistency
@@ -477,12 +488,12 @@ const handler: FnHandler = async (body, ctx) => {
     let providerPref = preferred_provider || project?.image_provider || 'auto';
     if (typeof providerPref === 'string' && providerPref.endsWith('_seedream')) providerPref = 'seedream';
     // Validate
-    if (!['auto', 'seedream', 'grok', 'nano_banana'].includes(providerPref)) providerPref = 'auto';
+    if (!['auto', 'nano_banana_2_lite', 'seedream', 'grok', 'nano_banana'].includes(providerPref)) providerPref = 'auto';
 
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`🎨 IMAGE SUBMIT — ${scenesToProcess.length} scenes`);
     console.log(`📐 Aspect: ${aspectRatio} | ⚡ Concurrency: ${MAX_CONCURRENT} | 🎯 Provider: ${providerPref}`);
-    console.log(`🏗️ Available: ${KIE_API_KEY ? 'Seedream + Grok + Nano' : '—'}`);
+    console.log(`🏗️ Available: ${KIE_API_KEY ? 'Nano Banana 2 Lite + Seedream + Grok + Nano' : '—'}`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     // ── Reference image for character consistency ──────────────

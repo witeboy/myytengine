@@ -10,13 +10,14 @@ import type { Ctx, FnHandler } from '../types';
 
 // ══════════════════════════════════════════════════════════════════
 // POLL SCENE IMAGE — checks KIE tasks, persists results, and advances
-// through the Seedream → Grok → Nano fallback chain.
+// through the Nano Banana 2 Lite → Grok → Nano fallback chain.
 // ══════════════════════════════════════════════════════════════════
 
 const prefixes = {
   seedream: 'seedream_task:',
   grok: 'grok_img_task:',
   nano: 'nano_task:',
+  nb2lite: 'nb2lite_task:',
 } as const;
 
 type Provider = keyof typeof prefixes;
@@ -48,7 +49,7 @@ async function submitProvider(
   aspectRatio: string,
   referenceImageUrl?: string | null,
 ) {
-  const prompt = cleanPrompt(scene, provider === 'seedream' ? 4000 : 1500);
+  const prompt = cleanPrompt(scene, provider === 'seedream' || provider === 'nb2lite' ? 4000 : 1500);
   if (!prompt) return null;
 
   if (provider === 'seedream') {
@@ -56,6 +57,17 @@ async function submitProvider(
       prompt,
       aspect_ratio: aspectRatio,
       resolution: '2K',
+    });
+  }
+
+  if (provider === 'nb2lite') {
+    const useReference = detectCharacterInScene(scene)
+      && referenceImageUrl
+      && referenceImageUrl.startsWith('http');
+    return createImageTask(ctx, 'nano-banana-2-lite', {
+      prompt,
+      aspect_ratio: aspectRatio,
+      ...(useReference ? { image_urls: [referenceImageUrl] } : {}),
     });
   }
 
@@ -172,7 +184,7 @@ const handler: FnHandler = async (body, ctx) => {
         const stale = updatedAt > 0 && now - updatedAt > staleThresholdMs;
 
         if (!task || stale) {
-          const recovered = await moveToProvider(ctx, 'seedream', scene, projectForRef, stale ? 'seedream_stale_recovery' : 'seedream_legacy_recovery')
+          const recovered = await moveToProvider(ctx, 'nb2lite', scene, projectForRef, stale ? 'nb2lite_stale_recovery' : 'nb2lite_legacy_recovery')
             || await moveToProvider(ctx, 'grok', scene, projectForRef, 'grok_stale_recovery');
           if (recovered) results.push(recovered);
           else {
@@ -195,7 +207,7 @@ const handler: FnHandler = async (body, ctx) => {
           continue;
         }
 
-        const fallbackProvider: Provider | null = task.provider === 'seedream'
+        const fallbackProvider: Provider | null = task.provider === 'seedream' || task.provider === 'nb2lite'
           ? 'grok'
           : task.provider === 'grok'
             ? 'nano'

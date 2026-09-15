@@ -5,9 +5,17 @@ const PROVIDERS = [
     id: 'auto',
     label: 'Auto (Best Available)',
     emoji: '🤖',
-    desc: 'Best available model, with automatic fallback.',
+    desc: 'Nano Banana 2 Lite, falling back to Grok, then Nano Banana.',
     color: 'border-gray-300 bg-gray-50',
     activeColor: 'border-blue-500 bg-blue-50 ring-2 ring-blue-200',
+  },
+  {
+    id: 'nano_banana_2_lite',
+    label: 'Nano Banana 2 Lite',
+    emoji: '🍌',
+    desc: 'Default. Best style adherence at $0.02, up to 10 reference images for character consistency.',
+    color: 'border-gray-300 bg-gray-50',
+    activeColor: 'border-yellow-500 bg-yellow-50 ring-2 ring-yellow-200',
   },
   {
     id: 'z_image',
@@ -51,7 +59,7 @@ export default function ImageProviderSelector({ selected, onSelect }) {
       <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
         🖼️ Image Generator
       </h3>
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {PROVIDERS.map(p => {
           const isActive = current === p.id;
           return (

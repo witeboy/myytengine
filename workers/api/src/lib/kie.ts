@@ -36,6 +36,7 @@ export const KIE_MODELS = {
   imageSeedream: 'seedream-4.5',              // "Seedream 4.5"
   imageGrok: 'grok-imagine/text-to-image',    // "Grok Imagine"
   imageNanoBanana: 'google/nano-banana',      // "Nano Banana"
+  imageNanoBanana2Lite: 'nano-banana-2-lite', // "Nano Banana 2 Lite" (default scene images; up to 10 refs)
 
   // image-to-image — editing, compositing, face blending
   imageSeedreamEdit: 'seedream-edit',
@@ -44,6 +45,7 @@ export const KIE_MODELS = {
 
   // image-to-video — animation
   videoGrok: 'grok-imagine/image-to-video',
+  videoSeedance: 'bytedance/seedance-1.5-pro', // default scene animation (720p, 5s)
 
   // NOTE music-2.5 was here. Music generation moved to AI33 (lib/ai33.ts).
 } as const;

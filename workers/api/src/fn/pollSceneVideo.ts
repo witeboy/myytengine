@@ -52,7 +52,7 @@ const handler: FnHandler = async (body, ctx) => {
 
     // Extract task ID from any provider prefix
     let taskId = null;
-    const prefixes = ['runway_task:', 'hailuo_task:', 'grok_vid_task:', 'veo_task:'];
+    const prefixes = ['seedance_task:', 'runway_task:', 'hailuo_task:', 'grok_vid_task:', 'veo_task:'];
     for (const prefix of prefixes) {
       if (videoUrl.startsWith(prefix)) {
         taskId = videoUrl.replace(prefix, '');
@@ -154,7 +154,7 @@ const handler: FnHandler = async (body, ctx) => {
         success: true,
         status: 'COMPLETED',
         video_url: stored.url,
-        resolution: '480p',
+        resolution: videoUrl.startsWith('seedance_task:') ? '720p' : '480p',
         task_id: taskId,
         scene_number: scene.scene_number
       };

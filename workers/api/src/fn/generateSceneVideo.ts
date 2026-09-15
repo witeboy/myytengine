@@ -6,26 +6,47 @@
 import { HttpError } from '../lib/http';
 import type { FnHandler } from '../types';
 
-// v2 — redeployed
-
 // ══════════════════════════════════════════════════════════════════
-// SCENE VIDEO GENERATOR — Grok Imagine image-to-video via Kie API
+// SCENE VIDEO GENERATOR — Seedance 1.5 Pro image-to-video via Kie API
 // ══════════════════════════════════════════════════════════════════
-// Generates animated video from scene still image using Grok Imagine.
-// 480p, 6s clips. ~$0.10 per 6s video.
+// Generates an animated clip from the scene's still image.
+// 720p, 5s, no audio — $0.0875 per clip (was Grok Imagine 480p 6s at $0.072).
+// Chosen in the 2026-09-15 model bake-off: steadier than 480p, cheaper than Grok 720p.
 //
 // REQUIRES: Scene must have a public HTTP image_url.
 // ══════════════════════════════════════════════════════════════════
 
 const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
 
+const SEEDANCE_MODEL = "bytedance/seedance-1.5-pro";
+
+// The breakdown stores a bare camera word ("push_in") as the animation prompt. A video
+// model reads that literally, so give it a sentence instead.
+const CAMERA_PHRASES = {
+  push_in: "slow cinematic push-in",
+  zoom_in: "slow cinematic push-in",
+  slow_zoom_in: "slow cinematic push-in",
+  zoom_out: "slow cinematic pull-back",
+  slow_zoom_out: "slow cinematic pull-back",
+  pan_left: "slow pan to the left",
+  pan_right: "slow pan to the right",
+  slow_pan: "slow horizontal pan",
+  static: "locked-off camera",
+};
+
+function animationPrompt(raw) {
+  const text = (raw || "").trim();
+  if (!text) return "Subtle cinematic motion, slow camera movement";
+  if (/^[a-z_]+$/.test(text)) {
+    return `${CAMERA_PHRASES[text] || text.replace(/_/g, " ")}, subtle natural motion in the scene`;
+  }
+  return text;
+}
+
 const handler: FnHandler = async (body, ctx) => {
   let scene_id;
 
   try {
-    const user = ctx.user;
-
-    
     scene_id = body.scene_id;
 
     const KIE_API_KEY = await ctx.keys.get('KIE_API_KEY');
@@ -47,15 +68,17 @@ const handler: FnHandler = async (body, ctx) => {
       throw new HttpError(400, 'Scene image must be a public HTTP URL');
     }
 
-    // Build animation prompt
-    const prompt = scene.animation_prompt || "Subtle cinematic motion, slow camera movement";
+    const projects = await ctx.db.Projects.filter({ id: scene.project_id });
+    const aspectRatio = projects[0]?.orientation === 'portrait' ? '9:16' : '16:9';
 
-    console.log(`🎬 Scene ${scene.scene_number} | Grok Imagine image-to-video | 480p`);
+    const prompt = animationPrompt(scene.animation_prompt);
+
+    console.log(`🎬 Scene ${scene.scene_number} | Seedance 1.5 Pro image-to-video | 720p 5s`);
     console.log(`🖼️ Image: ${scene.image_url.substring(0, 80)}...`);
     console.log(`🎥 Prompt: ${prompt.substring(0, 120)}...`);
 
     // ══════════════════════════════════════════════════════════════
-    // SUBMIT TO GROK IMAGINE IMAGE-TO-VIDEO VIA KIE
+    // SUBMIT TO SEEDANCE 1.5 PRO VIA KIE
     // ══════════════════════════════════════════════════════════════
 
     const response = await fetch(`${KIE_BASE}/createTask`, {
@@ -65,13 +88,15 @@ const handler: FnHandler = async (body, ctx) => {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "grok-imagine/image-to-video",
+        model: SEEDANCE_MODEL,
         input: {
-          image_urls: [scene.image_url],
           prompt,
-          mode: "normal",
-          duration: "6",
-          resolution: "480p"
+          input_urls: [scene.image_url],
+          resolution: "720p",
+          duration: "5",
+          aspect_ratio: aspectRatio,
+          generate_audio: false,
+          fixed_lens: false
         }
       })
     });
@@ -93,11 +118,11 @@ const handler: FnHandler = async (body, ctx) => {
     const taskId = resData.data?.taskId;
     if (!taskId) throw new Error("No taskId returned from Kie API");
 
-    console.log(`✓ Grok video task created: ${taskId}`);
+    console.log(`✓ Seedance video task created: ${taskId}`);
 
-    // Store task reference on scene (grok_vid_task prefix to distinguish)
+    // pollSceneVideo resolves any KIE task; the prefix records which model made it
     await ctx.db.Scenes.update(scene_id, {
-      video_url: `grok_vid_task:${taskId}`,
+      video_url: `seedance_task:${taskId}`,
       status: "pending"
     });
 
@@ -105,7 +130,7 @@ const handler: FnHandler = async (body, ctx) => {
       success: true,
       task_id: taskId,
       scene_number: scene.scene_number,
-      provider: "grok-imagine/image-to-video",
+      provider: SEEDANCE_MODEL,
       status: "CREATED"
     };
 

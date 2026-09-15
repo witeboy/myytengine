@@ -1123,7 +1123,7 @@ export default function ContentGeneration() {
     const ready = scenes.filter(s =>
       s.image_url && s.image_url.startsWith('http') &&
       (s.status === 'image_generated' || s.status === 'prompts_ready') &&
-      (!s.video_url || s.video_url.startsWith('grok_vid_task:') || s.video_url.startsWith('veo_task:'))
+      (!s.video_url || s.video_url.startsWith('seedance_task:') || s.video_url.startsWith('grok_vid_task:') || s.video_url.startsWith('veo_task:'))
     );
 
     if (ready.length === 0) { setGeneratingVideos(false); return; }
@@ -1445,7 +1445,7 @@ export default function ContentGeneration() {
   // ── Computed counts ───────────────────────────────────────────
   const imageCount = scenes.filter(s => s.image_url).length;
   const videoCount = scenes.filter(s => s.video_url && s.video_url.startsWith('http') && !s.video_url.startsWith('http://placeholder')).length;
-  const animatingCount = scenes.filter(s => s.video_url?.startsWith('grok_vid_task:') || s.video_url?.startsWith('veo_task:') || s.status === 'pending').length;
+  const animatingCount = scenes.filter(s => s.video_url?.startsWith('seedance_task:') || s.video_url?.startsWith('grok_vid_task:') || s.video_url?.startsWith('veo_task:') || s.status === 'pending').length;
   const breakdownReadyCount = scenes.filter(s => s.status === 'breakdown_ready').length;
   const promptsReadyCount = scenes.filter(s => s.status === 'prompts_ready').length;
   const directorNotesCount = scenes.filter(s => s.image_prompt?.startsWith('DIRECTOR_NOTES:')).length;
@@ -1675,7 +1675,7 @@ export default function ContentGeneration() {
                 <div className="flex items-center gap-2 mb-2">
                   <Badge className="bg-violet-100 text-violet-800 text-xs">
                     <Video className="w-3 h-3 mr-1" />
-                    {videoProgress.phase === 'submitting' ? 'Submitting to Grok Imagine' : 'Rendering with Grok · 480p'}
+                    {videoProgress.phase === 'submitting' ? 'Submitting to Seedance 1.5 Pro' : 'Rendering with Seedance · 720p'}
                   </Badge>
                 </div>
                 <div className="w-full bg-violet-100 rounded-full h-2 mb-3">
@@ -1789,7 +1789,7 @@ export default function ContentGeneration() {
               {project?.image_provider && project.image_provider !== 'auto' && (
                 <Badge className="bg-emerald-100 text-emerald-800 text-xs">
                   {project.image_provider === 'ai33_seedream' ? '🌱' : project.image_provider === 'grok' ? '⚡' : '🍌'}
-                  {' '}{project.image_provider === 'ai33_seedream' ? 'Seedream' : project.image_provider === 'grok' ? 'Grok' : 'Nano'}
+                  {' '}{project.image_provider === 'ai33_seedream' ? 'Seedream' : project.image_provider === 'grok' ? 'Grok' : project.image_provider === 'nano_banana_2_lite' ? 'Nano 2 Lite' : 'Nano'}
                 </Badge>
               )}
               {project?.reference_image_url ? (
