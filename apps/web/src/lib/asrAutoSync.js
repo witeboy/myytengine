@@ -78,11 +78,38 @@ function anchorConfirmed(scriptWords, si, asrWords, ai) {
   return false;
 }
 
+function sameLine(a, b) {
+  if (!a.length || a.length !== b.length) return false;
+  return a.every((w, i) => normalizeWord(w) === normalizeWord(b[i]));
+}
+
+// The breakdown records which camera angle of a line a scene is. Angle 0 starts a line, so
+// a line the script genuinely says twice in a row is not merged.
+function startsLine(scene) {
+  const notes = scene?.image_prompt;
+  if (typeof notes !== 'string' || !notes.startsWith('DIRECTOR_NOTES:')) return false;
+  try { return JSON.parse(notes.slice(15))?.angle_index === 0; } catch { return false; }
+}
+
 export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
   if (!asrWords?.length || !scenes?.length) return [];
 
   // ── Step 1: Extract script words per scene ──────────────────────
-  const sceneScriptWords = scenes.map(scene => getSceneWords(scene));
+  // Scenes that film one line from several camera angles repeat that line, but the
+  // voiceover says it once. The line is matched on its first scene (angleOf = null) and
+  // its time is shared across the angles in step 4.
+  const angleOf = scenes.map(() => null);
+  const sceneScriptWords = scenes.map((scene, i) => {
+    const words = getSceneWords(scene);
+    if (i > 0 && !startsLine(scene)) {
+      const lead = angleOf[i - 1] ?? i - 1;
+      if (sameLine(words, getSceneWords(scenes[lead]))) {
+        angleOf[i] = lead;
+        return [];
+      }
+    }
+    return words;
+  });
   const totalScriptWords = sceneScriptWords.reduce((s, arr) => s + arr.length, 0);
 
   console.log(`[ASR Sync v5] ${totalScriptWords} script words, ${asrWords.length} ASR words, ${scenes.length} scenes, ${totalAudioDuration.toFixed(1)}s audio`);
@@ -95,6 +122,11 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
 
   for (let si = 0; si < scenes.length; si++) {
     const scriptWords = sceneScriptWords[si];
+
+    if (angleOf[si] !== null) {
+      sceneMatches.push({ firstAsrIdx: -1, lastAsrIdx: -1, matchedCount: 0, empty: false });
+      continue;
+    }
 
     if (scriptWords.length === 0) {
       sceneMatches.push({ firstAsrIdx: -1, lastAsrIdx: -1, matchedCount: 0, empty: true });
@@ -262,6 +294,7 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
         matchScore: 0,
         empty: match.empty || false,
         fallback: match.fallback || false,
+        angleOf: angleOf[idx],
         wordCount: wc,
         speechStart: null,
         speechEnd: null,
@@ -316,7 +349,7 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
 
     // Find the next non-fallback, non-empty scene
     let nextIdx = i + 1;
-    while (nextIdx < results.length && (results[nextIdx].empty || results[nextIdx].fallback)) nextIdx++;
+    while (nextIdx < results.length && (results[nextIdx].empty || results[nextIdx].fallback || results[nextIdx].angleOf != null)) nextIdx++;
     if (nextIdx >= results.length) continue;
     const next = results[nextIdx];
     if (next.speechStart === null) continue;
@@ -339,6 +372,32 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
       curr.endTime = boundary;
       next.startTime = boundary;
     }
+  }
+
+  // 4c½: Multi-angle lines — share the line's time across its angles, weighted by the
+  // planned beat lengths. If the line itself was not heard, its angles fall back with it.
+  for (let i = 0; i < results.length; i++) {
+    if (results[i].angleOf != null) continue;
+    const members = [results[i]];
+    for (let j = i + 1; j < results.length && results[j].angleOf === i; j++) members.push(results[j]);
+    if (members.length < 2) continue;
+
+    const lead = members[0];
+    if (lead.startTime === null || lead.endTime === null) {
+      members.slice(1).forEach(m => { m.fallback = true; });
+      continue;
+    }
+    const weights = members.map((_, k) => Math.max(0.1, Number(scenes[i + k].duration_seconds) || 1));
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    const lineStart = lead.startTime;
+    const lineEnd = lead.endTime;
+    let t = lineStart;
+    members.forEach((m, k) => {
+      m.startTime = t;
+      t = k === members.length - 1 ? lineEnd : t + (lineEnd - lineStart) * (weights[k] / totalWeight);
+      m.endTime = t;
+      m.matchScore = lead.matchScore;
+    });
   }
 
   // 4d: Empty/fallback scenes — slot between neighbors

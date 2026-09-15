@@ -94,3 +94,40 @@ export function pacingMinutes(
       `(${wordCount} words). Scene timing was planned for ${estimate} min.`,
   };
 }
+
+/**
+ * The planned beats a sub-batch covers, one per scene, or null when there is no plan (sleep
+ * mode) or it does not cover the whole sub-batch. Narration comes from these, not from the
+ * AI: left to itself the AI drifted lines onto the wrong scenes, repeated them past their
+ * angles and sometimes returned none at all.
+ */
+export function subBatchBeats<T>(
+  beats: T[] | undefined,
+  phaseFirst: number,
+  sub: { offset: number; count: number },
+): T[] | null {
+  if (!beats?.length) return null;
+  const start = sub.offset - (phaseFirst - 1);
+  if (start < 0) return null;
+  const slice = beats.slice(start, start + sub.count);
+  return slice.length === sub.count ? slice : null;
+}
+
+/**
+ * The AI's scene for each planned number. Matched by scene_number when the AI numbered every
+ * scene as asked, otherwise by position; the two are never mixed.
+ */
+export function pickAiScenes<T extends { scene_number?: unknown }>(
+  aiScenes: T[],
+  firstNumber: number,
+  count: number,
+): Array<T | undefined> {
+  const byNumber = new Map<number, T>();
+  for (const scene of aiScenes) {
+    const n = Number(scene?.scene_number);
+    if (Number.isInteger(n) && !byNumber.has(n)) byNumber.set(n, scene);
+  }
+  const numbers = Array.from({ length: count }, (_, k) => firstNumber + k);
+  const numbered = numbers.every((n) => byNumber.has(n));
+  return numbers.map((n, k) => (numbered ? byNumber.get(n) : aiScenes[k]));
+}

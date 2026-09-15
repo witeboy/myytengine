@@ -9,6 +9,8 @@ import {
   pacingMinutes,
   phaseFirstNumbers,
   phaseSubBatches,
+  pickAiScenes,
+  subBatchBeats,
   subBatchDone,
 } from '../lib/breakdownPlan';
 import { anthropicFetch, geminiFetch, hasAiProvider } from '../lib/ai';
@@ -920,7 +922,7 @@ function buildBreakdownPrompt({
   styleDirective, storyAnalysis, characterBlock, continuityContext,
   phaseName, phasePurpose, sceneCount, sceneStart, scriptText,
   beatDurationsSlice, nicheProfile,
-  cinemaPreset, sceneStartGlobal, totalScenes
+  cinemaPreset, sceneStartGlobal, totalScenes, plannedBeats = null
 }) {
   const durLine = beatDurationsSlice.length > 0
     ? `\n**DURATION TARGETS (seconds per scene):** [${beatDurationsSlice.map(d => d.toFixed(1)).join(', ')}]`
@@ -948,6 +950,15 @@ function buildBreakdownPrompt({
   const motifLine = motifs.length > 0
     ? `\n**RECURRING VISUAL MOTIFS (plant at least one per phase):** ${motifs.join(', ')}`
     : '';
+
+  // Each scene's line is fixed by the plan. A long line spans several scenes: those are
+  // coverage of one moment from different set-ups, not new moments.
+  const hasAngles = !!plannedBeats?.some(b => (b.total_angles || 1) > 1);
+  const narrationBlock = plannedBeats?.length ? `
+**SCENE NARRATION (fixed by the script — copy each line into narration_text exactly):**
+${plannedBeats.map((b, i) => `Scene ${sceneStart + i}: "${b.narration_text}"${(b.total_angles || 1) > 1 ? ` — angle ${(b.angle_index || 0) + 1} of ${b.total_angles} on this line` : ''}`).join('\n')}
+${hasAngles ? `
+**MULTI-ANGLE COVERAGE:** A line marked "angle k of n" is ONE moment filmed from n camera set-ups, the way a crew shoots coverage. Keep location, time of day, lighting, wardrobe and characters identical across its angles; change only the set-up. Open the line on its widest or establishing angle, then move closer (WS → MS → CU → ECU) or change vantage (low angle, overhead, over-the-shoulder, POV). Each angle's visual_concept names the set-up it is.` : ''}` : '';
 
   const preset = cinemaPreset || {};
   const cinemaBlock = preset.prompt_prefix ? `
@@ -1004,6 +1015,7 @@ ${beatTable}
 
 **SCRIPT SEGMENT:**
 ${scriptText}
+${narrationBlock}
 
 **DIRECTOR'S LAWS:**
 1. PLOT-DRIVEN SCENES: Show what is HAPPENING in the story at this exact moment. Real action, real location, real stakes.
@@ -1531,15 +1543,22 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
           console.log(`⏭️ Scenes ${sub.offset + 1}-${sub.offset + sub.count} already exist — skipping`);
           continue;
         }
+        // The plan fixes each scene's line; an even word split cut sentences mid-way.
+        const planned = subBatchBeats(currentChunk.beats, phaseFirst, sub);
         const wordStart = (sub.offset - (phaseFirst - 1)) * wordsPerScene;
         const wordEnd = Math.min(wordStart + sub.count * wordsPerScene, chunkWords.length);
 
-        if (wordStart >= chunkWords.length) {
+        if (!planned && wordStart >= chunkWords.length) {
           console.warn(`⚠️ Sub-batch ${si+1} has no words — skipping`);
           continue;
         }
 
-        const subText = chunkWords.slice(wordStart, wordEnd).join(' ');
+        const subText = planned
+          ? planned
+              .filter((b, i) => i === 0 || b.narration_text !== planned[i - 1].narration_text)
+              .map((b) => b.narration_text)
+              .join(' ')
+          : chunkWords.slice(wordStart, wordEnd).join(' ');
         if (!subText || subText.trim().length === 0) {
           console.warn(`⚠️ Sub-batch ${si+1} produced empty text — skipping`);
           continue;
@@ -1561,7 +1580,8 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
           nicheProfile,
           cinemaPreset,
           sceneStartGlobal: sub.offset + 1,
-          totalScenes: totalTargetScenes
+          totalScenes: totalTargetScenes,
+          plannedBeats: planned
         });
 
         const subLabel = subBatches.length > 1 ? ` (sub ${si+1}/${subBatches.length})` : '';
@@ -1593,10 +1613,14 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
           console.log(`⏭️ Scenes ${sub.offset + 1}-${sub.offset + sub.count} were written by another call — discarding this copy`);
           continue;
         }
+        const picks = pickAiScenes(scenesArr, sub.offset + 1, sub.count);
         let subCreated = 0;
-        for (const scene of scenesArr.slice(0, sub.count)) {
-          const sceneNum = sub.offset + subCreated + 1;
-          const cleanedNarration = cleanNarrationText(scene.narration_text);
+        for (let k = 0; k < sub.count; k++) {
+          const scene = picks[k];
+          if (!scene) break;
+          const sceneNum = sub.offset + k + 1;
+          const beat = planned?.[k];
+          const cleanedNarration = cleanNarrationText(beat ? beat.narration_text : scene.narration_text);
           const targetDuration = beatDurations[sceneNum - 1] || scene.duration_seconds || 5;
 
           const cameraMap = {
@@ -1622,7 +1646,9 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
             phase: currentChunk.phase,
             characters_present: scene.characters_present || [],
             text_overlay: scene.text_overlay || '',
-            audio_note: scene.audio_note || ''
+            audio_note: scene.audio_note || '',
+            angle_index: beat?.angle_index ?? 0,
+            total_angles: beat?.total_angles ?? 1
           };
 
           await ctx.db.Scenes.create({
@@ -1653,7 +1679,9 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
             continuity_bridge: scene.continuity_bridge,
             emotional_intensity: scene.emotional_intensity || 0.5,
             viewer_emotion: scene.viewer_emotion || '',
-            duration_seconds: targetDuration
+            duration_seconds: targetDuration,
+            angle_index: beat?.angle_index ?? 0,
+            total_angles: beat?.total_angles ?? 1
           });
 
           phaseCreated++;

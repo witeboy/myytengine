@@ -102,3 +102,33 @@ test('real voiceover: a short common-word sentence does not steal later speech',
   });
   assert.ok(checked >= 6, `only ${checked} sentences were checkable`);
 });
+
+test('a line filmed from several angles is matched once and shared across its scenes', () => {
+  const lines = [
+    'Engineers worked through the night.',
+    'The guidance computer kept raising alarms that nobody in the room had ever seen before.',
+    'Minutes later the module touched down.',
+  ];
+  const { asrWords, trueStarts, duration } = fixture(lines);
+  // The breakdown gives the long line three camera angles, each repeating the line.
+  const scenes = [lines[0], lines[1], lines[1], lines[1], lines[2]]
+    .map((text, i) => ({ id: `m${i + 1}`, scene_number: i + 1, narration_text: text, duration_seconds: 3 }));
+  const res = quiet(() => alignScenesToASR(asrWords, scenes, duration));
+
+  assert.equal(res.filter((r) => r.fallback || r.startTime === null).length, 0, 'every scene placed');
+  assert.ok(Math.abs(res[1].speechStart - trueStarts[1]) < 0.01, 'the line starts where it is heard');
+  assert.ok(Math.abs(res[4].speechStart - trueStarts[2]) < 0.01, 'the next line is not pushed late');
+  const lineSpan = res[3].endTime - res[1].startTime;
+  [1, 2, 3].forEach((i) => assert.ok(Math.abs(res[i].duration - lineSpan / 3) < 0.01, `angle ${i} gets an equal share`));
+  for (let i = 1; i < res.length; i++) assert.ok(Math.abs(res[i].startTime - res[i - 1].endTime) < 0.002, `seam ${i}`);
+});
+
+test('a line the script really says twice is not merged', () => {
+  const lines = ['Go home.', 'Go home.', 'Fail in front of the whole world.'];
+  const { asrWords, trueStarts, duration } = fixture(lines);
+  const notes = (angle) => `DIRECTOR_NOTES:${JSON.stringify({ angle_index: angle, total_angles: 1 })}`;
+  const scenes = lines.map((text, i) => ({ id: `r${i + 1}`, scene_number: i + 1, narration_text: text, image_prompt: notes(0) }));
+  const res = quiet(() => alignScenesToASR(asrWords, scenes, duration));
+  assert.equal(res.filter((r) => r.fallback || r.angleOf != null).length, 0);
+  res.forEach((r, i) => assert.ok(Math.abs(r.speechStart - trueStarts[i]) < 0.01, `scene ${i + 1} start`));
+});

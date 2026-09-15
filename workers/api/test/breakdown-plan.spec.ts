@@ -5,6 +5,8 @@ import {
   pacingMinutes,
   phaseFirstNumbers,
   phaseSubBatches,
+  pickAiScenes,
+  subBatchBeats,
   subBatchDone,
 } from '../src/lib/breakdownPlan';
 
@@ -87,5 +89,32 @@ describe('pacingMinutes', () => {
 
   it('falls back to the script length when no project length is set', () => {
     expect(pacingMinutes(undefined, 1565)).toEqual({ minutes: 11, note: null });
+  });
+});
+
+describe('subBatchBeats', () => {
+  // A phase starting at scene 11 whose plan has 25 beats.
+  const beats = Array.from({ length: 25 }, (_, i) => ({ narration_text: `line ${i + 11}` }));
+
+  it('gives each scene of a sub-batch its planned line', () => {
+    const slice = subBatchBeats(beats, 11, { offset: 20, count: 10 }); // scenes 21-30
+    expect(slice?.map((b) => b.narration_text)).toEqual(Array.from({ length: 10 }, (_, i) => `line ${i + 21}`));
+  });
+
+  it('has no plan when the phase has none or it falls short', () => {
+    expect(subBatchBeats(undefined, 11, { offset: 10, count: 10 })).toBeNull();
+    expect(subBatchBeats(beats, 11, { offset: 30, count: 10 })).toBeNull(); // only 5 beats left
+  });
+});
+
+describe('pickAiScenes', () => {
+  it('matches by scene number when the AI numbered every scene, even out of order', () => {
+    const ai = [{ scene_number: 13, v: 'c' }, { scene_number: 11, v: 'a' }, { scene_number: 12, v: 'b' }];
+    expect(pickAiScenes(ai, 11, 3).map((s) => s?.v)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('falls back to position when the numbering does not fit, and leaves missing scenes empty', () => {
+    const ai = [{ scene_number: 1, v: 'a' }, { scene_number: 2, v: 'b' }]; // numbered from 1, not 21
+    expect(pickAiScenes(ai, 21, 3).map((s) => s?.v)).toEqual(['a', 'b', undefined]);
   });
 });
