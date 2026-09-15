@@ -156,7 +156,7 @@ const handler: FnHandler = async (body, ctx) => {
         success: true,
         status: 'COMPLETED',
         video_url: stored.url,
-        resolution: videoUrl.startsWith('seedance_task:') ? '720p' : '480p',
+        resolution: '480p',
         task_id: taskId,
         scene_number: scene.scene_number
       };

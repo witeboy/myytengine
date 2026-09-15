@@ -10,8 +10,10 @@ import type { FnHandler } from '../types';
 // SCENE VIDEO GENERATOR — Seedance 1.5 Pro image-to-video via Kie API
 // ══════════════════════════════════════════════════════════════════
 // Generates an animated clip from the scene's still image.
-// 720p, 5s, no audio — $0.0875 per clip (was Grok Imagine 480p 6s at $0.072).
-// Chosen in the 2026-09-15 model bake-off: steadier than 480p, cheaper than Grok 720p.
+// 480p, 10s, no audio — $0.0875 per clip, the same price as 720p at 5s but twice the motion.
+// Played at 0.8x on the timeline a clip fills 12.5s and stays smooth (24fps source ->
+// ~19 new frames a second). Model from the 2026-09-15 bake-off; 480p/10s chosen by the
+// owner for runtime per dollar.
 //
 // REQUIRES: Scene must have a public HTTP image_url.
 // ══════════════════════════════════════════════════════════════════
@@ -73,7 +75,7 @@ const handler: FnHandler = async (body, ctx) => {
 
     const prompt = animationPrompt(scene.animation_prompt);
 
-    console.log(`🎬 Scene ${scene.scene_number} | Seedance 1.5 Pro image-to-video | 720p 5s`);
+    console.log(`🎬 Scene ${scene.scene_number} | Seedance 1.5 Pro image-to-video | 480p 10s`);
     console.log(`🖼️ Image: ${scene.image_url.substring(0, 80)}...`);
     console.log(`🎥 Prompt: ${prompt.substring(0, 120)}...`);
 
@@ -92,8 +94,8 @@ const handler: FnHandler = async (body, ctx) => {
         input: {
           prompt,
           input_urls: [scene.image_url],
-          resolution: "720p",
-          duration: "5",
+          resolution: "480p",
+          duration: "10",
           aspect_ratio: aspectRatio,
           generate_audio: false,
           fixed_lens: false

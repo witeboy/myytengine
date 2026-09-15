@@ -1675,7 +1675,7 @@ export default function ContentGeneration() {
                 <div className="flex items-center gap-2 mb-2">
                   <Badge className="bg-violet-100 text-violet-800 text-xs">
                     <Video className="w-3 h-3 mr-1" />
-                    {videoProgress.phase === 'submitting' ? 'Submitting to Seedance 1.5 Pro' : 'Rendering with Seedance · 720p'}
+                    {videoProgress.phase === 'submitting' ? 'Submitting to Seedance 1.5 Pro' : 'Rendering with Seedance · 480p · 10s'}
                   </Badge>
                 </div>
                 <div className="w-full bg-violet-100 rounded-full h-2 mb-3">
