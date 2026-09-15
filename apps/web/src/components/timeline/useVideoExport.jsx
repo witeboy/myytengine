@@ -1,14 +1,17 @@
 import { useState, useRef, useCallback } from 'react';
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 import { api } from '@/api/client';
+import { createFinisher } from '@/lib/exportFinishing';
 
 const QUALITY_PRESETS = {
+  '1440p': { width: 2560, height: 1440, bitrate: 16000000 },
   '1080p': { width: 1920, height: 1080, bitrate: 6000000 },
   '720p': { width: 1280, height: 720, bitrate: 3000000 },
   '480p': { width: 854, height: 480, bitrate: 1500000 }
 };
 
 const PORTRAIT_PRESETS = {
+  '1440p': { width: 1440, height: 2560, bitrate: 16000000 },
   '1080p': { width: 1080, height: 1920, bitrate: 6000000 },
   '720p': { width: 720, height: 1280, bitrate: 3000000 },
   '480p': { width: 480, height: 854, bitrate: 1500000 }
@@ -22,6 +25,14 @@ const MAX_QUEUE_DEPTH = 8;
 const SEEK_TIMEOUT_MS = 300;
 const VIDEO_LOAD_TIMEOUT_MS = 20000;
 const KEYFRAME_INTERVAL_FRAMES = 60;
+
+// H.264 levels cap the frame size: the level 3.x/4.0 codec strings stop at 1080p, so
+// anything larger needs level 5.1.
+function codecCandidates(W, H) {
+  return W * H > 1920 * 1088
+    ? ['avc1.640033', 'avc1.4d0033', 'avc1.640034']
+    : ['avc1.42001e', 'avc1.4d001e', 'avc1.640028', 'avc1.42001f'];
+}
 
 const ease = {
   easeInOutQuad: function(t) { return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; },
@@ -485,7 +496,7 @@ export default function useVideoExport() {
     }
     var presets = orientation === 'portrait' ? PORTRAIT_PRESETS : QUALITY_PRESETS;
     var preset = presets[quality];
-    var codecs = ['avc1.42001e', 'avc1.4d001e', 'avc1.640028', 'avc1.42001f'];
+    var codecs = codecCandidates(preset.width, preset.height);
     for (var i = 0; i < codecs.length; i++) {
       try {
         var s = await VideoEncoder.isConfigSupported({
@@ -499,7 +510,7 @@ export default function useVideoExport() {
         }
       } catch (e) {}
     }
-    return { supported: true, warning: true, reason: quality + ' H.264 may not be hardware-accelerated.', codec: 'avc1.42001e' };
+    return { supported: true, warning: true, reason: quality + ' H.264 may not be hardware-accelerated.', codec: codecs[0] };
   }, []);
 
   const exportVideo = useCallback(async function(scenes, opts) {
@@ -512,6 +523,7 @@ export default function useVideoExport() {
     var musicVolume = options.musicVolume !== undefined ? options.musicVolume : 0.3;
     var editedMusicClips = options.musicClips || [];
     var captions = options.captions || [];
+    var finishing = options.finishing !== false; // light sharpening + fine grain
 
     _blobCache.clear();
     cancelledRef.current = false;
@@ -602,8 +614,8 @@ export default function useVideoExport() {
 
       console.log('[Export] ' + clips.length + ' clips | ' + totalFrames + 'fr | ' + totalDuration.toFixed(3) + 's | ' + fps + 'fps | ' + quality + ' | ' + totalSamples + ' audio samples');
 
-      var videoCodec = 'avc1.42001e';
-      var codecList = ['avc1.42001e', 'avc1.4d001e', 'avc1.640028'];
+      var codecList = codecCandidates(W, H);
+      var videoCodec = codecList[0];
       for (var cdi = 0; cdi < codecList.length; cdi++) {
         try {
           var s = await VideoEncoder.isConfigSupported({
@@ -661,6 +673,11 @@ export default function useVideoExport() {
 
       var canvas = new OffscreenCanvas(W, H);
       var ctx = canvas.getContext('2d');
+      // Clips and stills are enlarged to the export size; use the browser's best resampling.
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      var finisher = finishing ? createFinisher(W, H) : null;
+      if (finishing && !finisher) console.warn('[Export] WebGL2 unavailable — exporting without the finishing pass');
 
       setPhase('loading');
 
@@ -791,6 +808,15 @@ export default function useVideoExport() {
           await drawClipFrame(ci, elapsed);
         }
 
+        // Finishing touches the picture only; captions are drawn crisp on top of it.
+        if (finisher) {
+          ctx.save();
+          ctx.globalAlpha = 1;
+          ctx.globalCompositeOperation = 'copy';
+          ctx.drawImage(finisher.apply(canvas, f), 0, 0);
+          ctx.restore();
+        }
+
         drawCaptions(ctx, W, H, captions, absTime);
 
         var vf = new VideoFrame(canvas, { timestamp: timestamp_us });
@@ -808,6 +834,8 @@ export default function useVideoExport() {
           await yieldToMain();
         }
       }
+
+      if (finisher) finisher.dispose();
 
       lastFrame.forEach(function(bm, key) {
         var mediaInfo = clipMedia[key];

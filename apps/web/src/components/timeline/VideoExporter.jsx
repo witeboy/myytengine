@@ -41,6 +41,7 @@ export default function VideoExporter({
   const [fps,         setFps]         = useState(30);
   const [aspectRatio, setAspectRatio] = useState(orientation === 'portrait' ? '9:16' : '16:9');
   const [watermark,   setWatermark]   = useState(false);
+  const [finishing,   setFinishing]   = useState(true);
   const [activeMode,  setActiveMode]  = useState(null); // 'webcodecs' | 'ffmpeg' | null
   const [downloadUrl, setDownloadUrl] = useState(null);
   const [fileSize,    setFileSize]    = useState(null);
@@ -71,6 +72,7 @@ export default function VideoExporter({
 
   const totalDuration = scenes.reduce((s, c) => s + (c.duration || c.duration_seconds || 8), 0);
   const isLong        = totalDuration > 300;
+  const hasVideoClips = scenes.some(s => s.mediaType === 'video' && (s.videoUrl || s.video_url));
 
   // active progress values
   const progress = activeMode === 'ffmpeg' ? ffProgress : wcProgress;
@@ -112,7 +114,7 @@ export default function VideoExporter({
     const blob = await wcExportVideo(scenes, {
       quality, orientation: isPortrait ? 'portrait' : 'landscape',
       aspectRatio, fps, voiceoverUrl, musicUrl, musicVolume,
-      musicClips: musicClips || [], watermark, captions: captions || [],
+      musicClips: musicClips || [], watermark, finishing, captions: captions || [],
     });
 
     if (blob) {
@@ -163,6 +165,7 @@ export default function VideoExporter({
     { value: '480p',  label: '480p',  desc: 'Fast · small' },
     { value: '720p',  label: '720p',  desc: 'Recommended'  },
     { value: '1080p', label: '1080p', desc: 'Full HD'       },
+    { value: '1440p', label: '1440p', desc: 'Best on YouTube' },
   ];
 
   const aspectOptions = [
@@ -192,7 +195,7 @@ export default function VideoExporter({
             </Badge>
             <Badge variant="outline">{scenes.length} scenes</Badge>
             <Badge variant="outline">{Math.round(totalDuration)}s · {Math.round(totalDuration / 60)} min</Badge>
-            {isLong && <Badge variant="outline" className="text-amber-600 border-amber-300">Long — FFmpeg Worker recommended</Badge>}
+            {isLong && !hasVideoClips && <Badge variant="outline" className="text-amber-600 border-amber-300">Long — FFmpeg Worker recommended</Badge>}
           </div>
 
           {/* Settings */}
@@ -200,7 +203,7 @@ export default function VideoExporter({
             <>
               <div>
                 <p className="text-sm font-medium mb-2">Resolution</p>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   {qualityOptions.map(opt => (
                     <button key={opt.value} onClick={() => setQuality(opt.value)}
                       className={`p-2.5 rounded-lg border text-left transition-all ${quality === opt.value ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-gray-200 hover:border-gray-300'}`}>
@@ -237,6 +240,14 @@ export default function VideoExporter({
                 </div>
               </div>
 
+              <label className="flex items-start gap-2 rounded-lg border border-gray-200 p-2.5 cursor-pointer hover:border-gray-300">
+                <input type="checkbox" className="mt-0.5" checked={finishing} onChange={e => setFinishing(e.target.checked)} />
+                <span>
+                  <span className="block text-sm font-medium">Film finish</span>
+                  <span className="block text-[10px] text-gray-500">Light sharpening and fine grain on the picture, not the captions. Helps 480p animations sit next to the stills. WebCodecs export only.</span>
+                </span>
+              </label>
+
               {/* Method comparison */}
               <div className="grid grid-cols-2 gap-2 text-[10px] text-gray-600 pt-1">
                 <div className="bg-blue-50 rounded-lg p-2.5 border border-blue-100">
@@ -245,7 +256,7 @@ export default function VideoExporter({
                 </div>
                 <div className="bg-purple-50 rounded-lg p-2.5 border border-purple-100">
                   <p className="font-semibold text-purple-700 mb-1 flex items-center gap-1"><Cpu className="w-3 h-3" /> FFmpeg Worker</p>
-                  <p>Off main thread. Better for long videos. UI stays responsive while encoding.</p>
+                  <p>Off main thread, UI stays responsive. Still images only: animated clips and transitions are left out, and it always renders at 720p.</p>
                 </div>
               </div>
             </>
