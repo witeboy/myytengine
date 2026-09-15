@@ -199,7 +199,7 @@ const styleMap = {
     positive: "Stylized low-poly 3D cartoon, all geometry from visible flat-shaded polygons and triangular facets. Realistic human proportions with geometric stylization. Angular facial features, expressive eyes, defined eyebrows. Geometric hair, warm peach-tan skin with polygon-edge shading. Clothing with visible folds and flat polygon faces. All environments built from flat-shaded polygons. Vibrant saturated colors, clean polygon edges, no smoothing, matte clay-toy quality, soft ambient occlusion, sharp focused background with all elements in focus, deep depth of field, Pixar expressiveness with geometric stylization",
    negative: "photorealistic, photograph, smooth high-poly, hyperrealistic, film grain, lens flare, bokeh, blurred background, shallow depth of field, out of focus background, anime, cel-shaded, 2D flat, hand-drawn, sketch, watercolor, oil painting, dark horror, neon cyberpunk, abstract, pixel art, voxel art, wireframe, monochrome, desaturated, ray-traced, photogrammetry, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature, funko pop"  },
   faceless_mannequin: {
-    positive: "photorealistic period scene, low-key chiaroscuro lighting from practical sources (candles, oil lamps, firelight, a single window), warm amber, tobacco and parchment tones over deep rich blacks, soft light falloff into shadow, gentle atmospheric haze, rich tactile period textures, crisp micro-contrast, razor-sharp detail, masterpiece quality",
+    positive: "photorealistic period scene, every figure a faceless porcelain mannequin with a blank egg-smooth head and no human skin, low-key chiaroscuro lighting from practical sources (candles, oil lamps, firelight, a single window), warm amber, tobacco and parchment tones over deep rich blacks, soft light falloff into shadow, gentle atmospheric haze, rich tactile period textures, crisp micro-contrast, razor-sharp detail, masterpiece quality",
     negative: "eyes, eyebrows, nose, mouth, lips, facial features, painted face, makeup, human skin, realistic human face, skin on hands, cracked porcelain, creepy doll, horror, uncanny, mask, store window display, plain studio backdrop, isolated character on blank background, cartoon, anime, 3D render, plastic toy, flat 2D, sketch, painting, bright flat lighting, high key, oversaturated, neon, text, words, letters, numbers, logos, garbled text, low quality, blurry"
   },
   skeleton_protagonist: {
@@ -306,7 +306,7 @@ function getStyleSceneBodyRules(styleName) {
       rendering: "Clean polygon edges on all surfaces, flat-shaded with no smoothing (signature faceted look). Soft ambient occlusion, gentle directional shadows, no outlines or cel-shading. Bright gradient sky, geometric cloud clusters. Vibrant saturated colors, warm and inviting."
     },
     faceless_mannequin: {
-      characters: "EVERY character, protagonist and supporting cast alike, is a faceless white porcelain mannequin: a smooth featureless glossy head with NO eyes, nose or mouth, and white porcelain hands. Characters are told apart by wardrobe, hair or headwear, build and posture. Clothing is richly textured and accurate to the story's era and region. Elegant and dignified, never creepy. Characters are DOING something: holding, offering, examining, working. NO human skin or human faces anywhere in the frame.",
+      characters: "EVERY character, protagonist and supporting cast alike, is a faceless white porcelain mannequin: a blank, featureless egg-smooth glossy head with NO eyes, nose or mouth, and white porcelain hands. Characters are told apart by wardrobe, hair or headwear, build and posture. Clothing is richly textured and accurate to the story's era and region. Elegant and dignified, never creepy. Characters are DOING something: holding, offering, examining, working. NO human skin or human faces anywhere in the frame.",
       environments: "Period-accurate settings matched to the story's era and region — cottages, courts, workshops, markets, studies, orchards. Rich tactile materials: dark aged wood with visible grain, worn stone and plaster, brass and copper, leather, linen, parchment, wax candles. Lived-in and detailed, with foreground elements framing the edges and backgrounds that stay readable.",
       objects: "Props rendered in tactile detail — patina on metal, grain in wood, weave in fabric, wear on edges. No readable text on any object.",
       rendering: "Low-key chiaroscuro lit by practical sources (candles, oil lamps, firelight, a single window). Warm amber, tobacco and parchment tones over deep, rich blacks. Soft light falloff into shadow, gentle atmospheric haze. Crisp micro-contrast and razor-sharp texture on the subject, shallow depth of field. Exterior scenes keep the same palette and contrast under low golden or overcast light."
@@ -576,9 +576,10 @@ const handler: FnHandler = async (body, ctx) => {
           // Faceless mannequin: the LLM is told to embed this in full, so give it an identity
           // with no skin, eyes or facial features to embed
           const identity = visualStyle === 'faceless_mannequin'
-            ? ['faceless white porcelain mannequin (smooth blank head with no eyes, nose or mouth; porcelain hands)',
+            ? ['faceless porcelain mannequin (blank, featureless egg-smooth white head with no eyes, nose or mouth; white porcelain hands)',
                 ...rawIdentity.split(',').map((s) => s.trim())
-                  .filter((s) => s && !/\b(skin|complexion|eyes?|eyebrows?|brows?|nose|lips?|mouth|face|facial|jaw|chin|cheeks?|cheekbones?|freckles?|scars?|moles?|beard|moustache|mustache|smile|teeth)\b/i.test(s))]
+                  .filter((s) => s && !/\b(\d{1,3}[\s-]*year[\s-]*old|skin|complexion|eyes?|eyebrows?|brows?|nose|lips?|mouth|face|facial|jaw|chin|cheeks?|cheekbones?|freckles?|scars?|moles?|beard|moustache|mustache|smile|teeth)\b/i.test(s))
+                  .map((s) => s.replace(/\b(female|woman)\b/gi, 'feminine figure').replace(/\b(male|man)\b/gi, 'masculine figure'))]
                 .join(', ')
             : rawIdentity;
           const clothing = c.default_clothing || '';
@@ -663,7 +664,11 @@ const handler: FnHandler = async (body, ctx) => {
           .filter((s) => /\b(hair|bob|bun|braids?|curls?|locs|afro|ponytail|wig|bald|headwrap|bonnet|turban|hat|cap|crown|veil|scarf)\b/i.test(s)
             && !/\b(skin|eyes?|eyebrows?|brows?|nose|lips?|mouth|face|cheeks?|freckles?|scars?|beard|moustache|mustache)\b/i.test(s))
           .join(', ');
-        return `a faceless white porcelain mannequin with a smooth featureless glossy head (no eyes, nose or mouth) and white porcelain hands, ${bodyDesc}${hair ? ', ' + hair : ''}, in richly textured period clothing, no human skin anywhere`;
+        // Age and gender words make image models draw a person; keep only the figure's shape
+        const figure = (bodyDesc || '').replace(/\b\d{1,3}[\s-]*year[\s-]*old,?\s*/gi, '')
+          .replace(/\b(female|woman)\b/gi, 'feminine figure').replace(/\b(male|man)\b/gi, 'masculine figure')
+          .replace(/^[\s,]+|[\s,]+$/g, '');
+        return `a faceless porcelain mannequin: blank, featureless egg-smooth white head (no eyes, nose or mouth), white porcelain hands${figure ? ', ' + figure : ''}${hair ? ', ' + hair : ''}, in richly textured period clothing, no human skin anywhere`;
       },
       skeleton_protagonist: (bodyDesc, faceDesc) =>
         `photorealistic transparent skeleton with clear glass-like body shell shown full body in the scene, glossy ivory bones visible through translucent torso, big round expressive brown amber eyeballs in skull sockets, ${faceDesc}`
@@ -719,7 +724,7 @@ const handler: FnHandler = async (body, ctx) => {
 
         // ── MINIMAL: silhouette only (wide shots — character is small in frame)
         // Just enough to recognize "that's our character" at a distance
-        const minimalDesc = `a ${visualStyle === 'faceless_mannequin' ? 'faceless white porcelain mannequin, ' : ''}${bodyDesc}${hairShort ? ', ' + hairShort : ''}${clothing ? ', wearing ' + clothing.substring(0, 60) : ''}`;
+        const minimalDesc = `${visualStyle === 'faceless_mannequin' ? 'a faceless porcelain mannequin with a blank egg-smooth head' : `a ${bodyDesc}`}${hairShort ? ', ' + hairShort : ''}${clothing ? ', wearing ' + clothing.substring(0, 60) : ''}`;
 
         // ── MODERATE: action-level (medium shots — body visible, face not dominant)
         // Body + hair + skin + clothing — no detailed facial features

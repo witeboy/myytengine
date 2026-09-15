@@ -79,7 +79,11 @@ const styleCharacterRules = {
       .filter((s) => /\b(hair|bob|bun|braids?|curls?|locs|afro|ponytail|wig|bald|headwrap|bonnet|turban|hat|cap|crown|veil|scarf)\b/i.test(s)
         && !/\b(skin|eyes?|eyebrows?|brows?|nose|lips?|mouth|face|cheeks?|freckles?|scars?|beard|moustache|mustache)\b/i.test(s))
       .join(', ');
-    return `a faceless white porcelain mannequin with a smooth featureless glossy head (no eyes, nose or mouth) and white porcelain hands, ${bodyDesc}${hair ? ', ' + hair : ''}, in richly textured period clothing, no human skin anywhere`;
+    // Age and gender words make image models draw a person; keep only the figure's shape
+    const figure = (bodyDesc || '').replace(/\b\d{1,3}[\s-]*year[\s-]*old,?\s*/gi, '')
+      .replace(/\b(female|woman)\b/gi, 'feminine figure').replace(/\b(male|man)\b/gi, 'masculine figure')
+      .replace(/^[\s,]+|[\s,]+$/g, '');
+    return `a faceless porcelain mannequin: blank, featureless egg-smooth white head (no eyes, nose or mouth), white porcelain hands${figure ? ', ' + figure : ''}${hair ? ', ' + hair : ''}, in richly textured period clothing, no human skin anywhere`;
   },
   skeleton_protagonist: () => `photorealistic transparent skeleton with clear glass-like body shell, glossy ivory bones visible through translucent torso, big round expressive brown amber eyeballs in skull sockets`
 };
@@ -424,7 +428,7 @@ const handler: FnHandler = async (body, ctx) => {
       const hairMatch = face.match(/\b([\w-]+\s+)?(hair|bob|ponytail|bun|braids?|curls?|locs|afro)\b[^,]*/i);
       const hairShort = hairMatch ? hairMatch[0].trim() : '';
 
-      const minimalDesc = `a ${visualStyle === 'faceless_mannequin' ? 'faceless white porcelain mannequin, ' : ''}${bodyDesc}${hairShort ? ', ' + hairShort : ''}${clothing ? ', wearing ' + clothing.substring(0, 60) : ''}`;
+      const minimalDesc = `${visualStyle === 'faceless_mannequin' ? 'a faceless porcelain mannequin with a blank egg-smooth head' : `a ${bodyDesc}`}${hairShort ? ', ' + hairShort : ''}${clothing ? ', wearing ' + clothing.substring(0, 60) : ''}`;
 
       let compactFaceMod = face;
       if (compactFaceMod.length > 100) {

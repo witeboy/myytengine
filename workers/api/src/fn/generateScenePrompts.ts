@@ -58,7 +58,7 @@ async function cleanPromptWithOpenAI(ctx, messyPrompt, visualStyle) {
   try {
     const styleConstraint = visualStyle
       ? (visualStyle === 'faceless_mannequin'
-        ? `\nThe visual style is faceless mannequin — every character is a faceless white porcelain mannequin with a smooth blank glossy head (no eyes, nose or mouth) and porcelain hands. Never add facial features, facial expressions or human skin. Keep the low-key candlelit chiaroscuro look. Do NOT write "Faceless mannequin" as a label prefix.`
+        ? `\nThe visual style is faceless mannequin — every character is a faceless white porcelain mannequin with a blank, featureless egg-smooth glossy head (no eyes, nose or mouth) and porcelain hands. Never add facial features, facial expressions or human skin. Keep the low-key candlelit chiaroscuro look. Do NOT write "Faceless mannequin" as a label prefix.`
         : visualStyle === 'skeleton_protagonist'
         ? `\nThe visual style is skeleton protagonist — a transparent skeleton with glass-like body replaces the human character entirely. The skeleton is NOT overlaid on a real person. No real human skin or flesh on the protagonist. Other characters are normal humans. Do NOT write "Skeleton protagonist" as a label prefix.`
         : `\nThe visual style is strictly ${visualStyle.replace(/_/g, ' ')}. Lock this style and prevent any realism bleed or style mixing.`)
@@ -271,7 +271,7 @@ const styleMap = {
    negative: "real human skin, real human face, realistic flesh, normal human appearance, human skin visible through skeleton, dual character overlay, skeleton overlaid on human, x-ray medical scan, cartoon skeleton, halloween decoration, flat 2D, anime, comic, horror gore, neon, plastic toy, low quality, blurry, abstract, minimalist, sketch, painting, chibi, dia de los muertos, empty dark eye sockets, bare bones without transparent body, scary horror skeleton, torso only, bust shot, head and shoulders only, cropped at waist, isolated character on blank background, portrait crop, dark background, black background, text, words, letters, numbers, UI elements, screen content, garbled text"
   },
   faceless_mannequin: {
-    positive: "photorealistic period scene, low-key chiaroscuro lighting from practical sources (candles, oil lamps, firelight, a single window), warm amber, tobacco and parchment tones over deep rich blacks, soft light falloff into shadow, gentle atmospheric haze, rich tactile period textures, crisp micro-contrast, razor-sharp detail, masterpiece quality",
+    positive: "photorealistic period scene, every figure a faceless porcelain mannequin with a blank egg-smooth head and no human skin, low-key chiaroscuro lighting from practical sources (candles, oil lamps, firelight, a single window), warm amber, tobacco and parchment tones over deep rich blacks, soft light falloff into shadow, gentle atmospheric haze, rich tactile period textures, crisp micro-contrast, razor-sharp detail, masterpiece quality",
     negative: "eyes, eyebrows, nose, mouth, lips, facial features, painted face, makeup, human skin, realistic human face, skin on hands, cracked porcelain, creepy doll, horror, uncanny, mask, store window display, plain studio backdrop, isolated character on blank background, cartoon, anime, 3D render, plastic toy, flat 2D, sketch, painting, bright flat lighting, high key, oversaturated, neon, text, words, letters, numbers, logos, garbled text, low quality, blurry"
   },
   afro_nolly_global: {
@@ -390,7 +390,7 @@ function getStyleSceneBodyRules(styleName) {
       rendering: "Cinematic wide-to-medium framing. HDR cinematic lens, warm amber grading, dramatic volumetric golden hour lighting, strong rim light on bone edges. Sharp detailed backgrounds."
     },
     faceless_mannequin: {
-      characters: "EVERY character, protagonist and supporting cast alike, is a faceless white porcelain mannequin: a smooth featureless glossy head with NO eyes, nose or mouth, and white porcelain hands. Characters are told apart by wardrobe, hair or headwear, build and posture. Clothing is richly textured and accurate to the story's era and region. Elegant and dignified, never creepy. Characters are DOING something: holding, offering, examining, working. NO human skin or human faces anywhere in the frame.",
+      characters: "EVERY character, protagonist and supporting cast alike, is a faceless white porcelain mannequin: a blank, featureless egg-smooth glossy head with NO eyes, nose or mouth, and white porcelain hands. Characters are told apart by wardrobe, hair or headwear, build and posture. Clothing is richly textured and accurate to the story's era and region. Elegant and dignified, never creepy. Characters are DOING something: holding, offering, examining, working. NO human skin or human faces anywhere in the frame.",
       environments: "Period-accurate settings matched to the story's era and region — cottages, courts, workshops, markets, studies, orchards. Rich tactile materials: dark aged wood with visible grain, worn stone and plaster, brass and copper, leather, linen, parchment, wax candles. Lived-in and detailed, with foreground elements framing the edges and backgrounds that stay readable.",
       objects: "Props rendered in tactile detail — patina on metal, grain in wood, weave in fabric, wear on edges. No readable text on any object.",
       rendering: "Low-key chiaroscuro lit by practical sources (candles, oil lamps, firelight, a single window). Warm amber, tobacco and parchment tones over deep, rich blacks. Soft light falloff into shadow, gentle atmospheric haze. Crisp micro-contrast and razor-sharp texture on the subject, shallow depth of field. Exterior scenes keep the same palette and contrast under low golden or overcast light."
@@ -847,9 +847,10 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
           // Faceless mannequin: the LLM is told to embed this in full, so give it an identity
           // with no skin, eyes or facial features to embed
           const identity = visualStyle === 'faceless_mannequin'
-            ? ['faceless white porcelain mannequin (smooth blank head with no eyes, nose or mouth; porcelain hands)',
+            ? ['faceless porcelain mannequin (blank, featureless egg-smooth white head with no eyes, nose or mouth; white porcelain hands)',
                 ...rawIdentity.split(',').map((s) => s.trim())
-                  .filter((s) => s && !/\b(skin|complexion|eyes?|eyebrows?|brows?|nose|lips?|mouth|face|facial|jaw|chin|cheeks?|cheekbones?|freckles?|scars?|moles?|beard|moustache|mustache|smile|teeth)\b/i.test(s))]
+                  .filter((s) => s && !/\b(\d{1,3}[\s-]*year[\s-]*old|skin|complexion|eyes?|eyebrows?|brows?|nose|lips?|mouth|face|facial|jaw|chin|cheeks?|cheekbones?|freckles?|scars?|moles?|beard|moustache|mustache|smile|teeth)\b/i.test(s))
+                  .map((s) => s.replace(/\b(female|woman)\b/gi, 'feminine figure').replace(/\b(male|man)\b/gi, 'masculine figure'))]
                 .join(', ')
             : rawIdentity;
           const clothing = c.default_clothing || '';
@@ -961,7 +962,11 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
           .filter((s) => /\b(hair|bob|bun|braids?|curls?|locs|afro|ponytail|wig|bald|headwrap|bonnet|turban|hat|cap|crown|veil|scarf)\b/i.test(s)
             && !/\b(skin|eyes?|eyebrows?|brows?|nose|lips?|mouth|face|cheeks?|freckles?|scars?|beard|moustache|mustache)\b/i.test(s))
           .join(', ');
-        return `a faceless white porcelain mannequin with a smooth featureless glossy head (no eyes, nose or mouth) and white porcelain hands, ${bodyDesc}${hair ? ', ' + hair : ''}, in richly textured period clothing, no human skin anywhere`;
+        // Age and gender words make image models draw a person; keep only the figure's shape
+        const figure = (bodyDesc || '').replace(/\b\d{1,3}[\s-]*year[\s-]*old,?\s*/gi, '')
+          .replace(/\b(female|woman)\b/gi, 'feminine figure').replace(/\b(male|man)\b/gi, 'masculine figure')
+          .replace(/^[\s,]+|[\s,]+$/g, '');
+        return `a faceless porcelain mannequin: blank, featureless egg-smooth white head (no eyes, nose or mouth), white porcelain hands${figure ? ', ' + figure : ''}${hair ? ', ' + hair : ''}, in richly textured period clothing, no human skin anywhere`;
       },
       afro_nolly_global: (bodyDesc, faceDesc) =>
         `a 3D Pixar-quality ${bodyDesc}, ${faceDesc}, skin glowing with warm subsurface scattering, individually strand-rendered hair with fiber detail, vibrant colorful clothing heavy with realistic fabric weight, gold jewelry catching the light`
@@ -1097,7 +1102,7 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
 
         // ── MINIMAL: silhouette only (wide shots — character is small in frame)
         // Just enough to recognize "that's our character" at a distance
-        const minimalDesc = `a ${visualStyle === 'faceless_mannequin' ? 'faceless white porcelain mannequin, ' : ''}${bodyDesc}${hairShort ? ', ' + hairShort : ''}${clothing ? ', wearing ' + clothing.substring(0, 60) : ''}`;
+        const minimalDesc = `${visualStyle === 'faceless_mannequin' ? 'a faceless porcelain mannequin with a blank egg-smooth head' : `a ${bodyDesc}`}${hairShort ? ', ' + hairShort : ''}${clothing ? ', wearing ' + clothing.substring(0, 60) : ''}`;
 
         // ── MODERATE: action-level (medium shots — body visible, face not dominant)
         // Body + hair + skin + clothing — no detailed facial features
