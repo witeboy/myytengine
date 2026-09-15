@@ -94,8 +94,10 @@ const handler: FnHandler = async (body, ctx) => {
     const failMsg = record?.failMsg;
 
     // ── Still processing ────────────────────────────────────────────
-    if (!state || state === 'processing' || state === 'pending' || state === 'queued') {
-      console.log(`⏳ Grok video task ${taskId}: ${state || 'processing'}`);
+    // Anything short of success or fail is still running. Models name the in-between
+    // states differently (Seedance does not use 'processing'), so do not enumerate them.
+    if (state !== 'success' && state !== 'fail') {
+      console.log(`⏳ Video task ${taskId}: ${state || 'processing'}`);
       return {
         success: true,
         status: 'PROCESSING',
