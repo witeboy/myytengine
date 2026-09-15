@@ -843,7 +843,15 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
 
     const characterBlock = characters.length > 0
       ? `**CHARACTERS — IDENTITY DNA (these features are PERMANENT and NEVER change between scenes):**\n${characters.map(c => {
-          const identity = c.identity_core || c.visual_description || c.description || '';
+          const rawIdentity = c.identity_core || c.visual_description || c.description || '';
+          // Faceless mannequin: the LLM is told to embed this in full, so give it an identity
+          // with no skin, eyes or facial features to embed
+          const identity = visualStyle === 'faceless_mannequin'
+            ? ['faceless white porcelain mannequin (smooth blank head with no eyes, nose or mouth; porcelain hands)',
+                ...rawIdentity.split(',').map((s) => s.trim())
+                  .filter((s) => s && !/\b(skin|complexion|eyes?|eyebrows?|brows?|nose|lips?|mouth|face|facial|jaw|chin|cheeks?|cheekbones?|freckles?|scars?|moles?|beard|moustache|mustache|smile|teeth)\b/i.test(s))]
+                .join(', ')
+            : rawIdentity;
           const clothing = c.default_clothing || '';
           return `• ${c.name}:\n  IDENTITY (permanent): ${identity}${clothing ? `\n  DEFAULT CLOTHING (can change per scene): ${clothing}` : ''}`;
         }).join('\n')}\n\n**RULE: You MUST embed the FULL identity description for EVERY character in EVERY image_prompt. The image generator has ZERO memory — each prompt is a fresh start. Name alone means NOTHING to the renderer.**\n\n**CRITICAL WEAVING RULE — THE #1 CAUSE OF BAD IMAGES IS VIOLATING THIS:**\nCharacter features must be WOVEN INTO the action and environment — NEVER listed as an isolated block.\nThe image generator reads prompts left-to-right. If it encounters a paragraph of face/body traits detached from any action, it renders a PORTRAIT of that person — ignoring the scene entirely.\n\nDEATH PATTERN (produces floating heads / portraits): "Close-up of a coin in a gutter. A 55 year old male with light-medium skin, oval face, hazel eyes, straight nose, medium lips, graying hair, average build, 5ft10, wrinkles around eyes, confident smile is implied by the perspective."\nThe image gen reads the trait dump and renders a face in a gutter.\n\nCORRECT PATTERN (produces a scene with character IN it): "Close-up of a tarnished coin lying in a rain-filled gutter, the gray asphalt reflecting overcast sky. A graying-haired man in a rumpled coat crouches at the curb, his weathered face twisted in disappointment as he stares down at the coin, rain collecting on his hunched shoulders."\nEvery trait is CONNECTED: hair → visible because he\'s crouching, face → twisted in emotion, shoulders → hunched + wet from rain.\n\nRULES:\n1. NEVER write a character description as a standalone clause or sentence. Every trait must be mid-action or affected by the environment.\n2. Spread traits across the prompt — hair in one clause, skin in another, build shown through posture. Don\'t front-load them.\n3. Use the character\'s NAME in your prompt — our post-processing system will replace it with the correct identity tag. Write "[CHARACTER_NAME] crouches by the gutter" not "A 55 year old male with light-medium skin crouches...".\n4. The environment sentence MUST come BEFORE the character.`
@@ -1069,7 +1077,7 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
         .replace(/\bNose[\s:]+/gi, '')
         .replace(/\bLips[\s:]+/gi, '')
         .replace(/\bHair[\s:]*\([^)]*\)[\s:]+/gi, '')
-        .replace(/\bHair[\s:]+/gi, '')
+        .replace(/\bHair\s*:\s*/gi, '') // label only: "auburn hair in a bun" keeps the word
         .replace(/\bBuild\+?height[\s:]+/gi, '')
         .replace(/\bDistinguishing marks[\s:]+/gi, '')
         .replace(/\bBuild[\s:]+/gi, '')

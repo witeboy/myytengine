@@ -140,7 +140,7 @@ function cleanIdentityDesc(raw) {
     .replace(/\bNose[\s:]+/gi, '')
     .replace(/\bLips[\s:]+/gi, '')
     .replace(/\bHair[\s:]*\([^)]*\)[\s:]+/gi, '')
-    .replace(/\bHair[\s:]+/gi, '')
+    .replace(/\bHair\s*:\s*/gi, '') // label only: "auburn hair in a bun" keeps the word
     .replace(/\bBuild\+?height[\s:]+/gi, '')
     .replace(/\bDistinguishing marks[\s:]+/gi, '')
     .replace(/\bBuild[\s:]+/gi, '')

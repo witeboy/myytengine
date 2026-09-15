@@ -572,7 +572,15 @@ const handler: FnHandler = async (body, ctx) => {
 
     const characterBlock = characters.length > 0
       ? `**CHARACTERS — IDENTITY DNA (these features are PERMANENT and NEVER change between scenes):**\n${characters.map(c => {
-          const identity = c.identity_core || c.visual_description || c.description || '';
+          const rawIdentity = c.identity_core || c.visual_description || c.description || '';
+          // Faceless mannequin: the LLM is told to embed this in full, so give it an identity
+          // with no skin, eyes or facial features to embed
+          const identity = visualStyle === 'faceless_mannequin'
+            ? ['faceless white porcelain mannequin (smooth blank head with no eyes, nose or mouth; porcelain hands)',
+                ...rawIdentity.split(',').map((s) => s.trim())
+                  .filter((s) => s && !/\b(skin|complexion|eyes?|eyebrows?|brows?|nose|lips?|mouth|face|facial|jaw|chin|cheeks?|cheekbones?|freckles?|scars?|moles?|beard|moustache|mustache|smile|teeth)\b/i.test(s))]
+                .join(', ')
+            : rawIdentity;
           const clothing = c.default_clothing || '';
           return `• ${c.name}:\n  IDENTITY (permanent): ${identity}${clothing ? `\n  DEFAULT CLOTHING (can change per scene): ${clothing}` : ''}`;
         }).join('\n')}\n\n**RULE: You MUST embed the FULL identity description for EVERY character in EVERY image_prompt. The image generator has ZERO memory — each prompt is a fresh start. Name alone means NOTHING to the renderer.**`
