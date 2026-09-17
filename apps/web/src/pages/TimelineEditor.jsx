@@ -50,6 +50,22 @@ const CINEMATIC_MOTIONS = [
   { id: 'diagonal_tr_bl',  name: 'Diagonal ↙',        description: 'Drifts top-right to bottom-left',      startScale: 1.0,  endScale: 1.08, startX: -1.5, startY: 1.0,  endX: 1.5,  endY: -1.0 },
 ];
 
+// Most scenes in a long video are stills, and a still with no motion is a freeze-frame.
+// Give each one a slow drift, varied so consecutive scenes do not feel mechanical, and a
+// gentle fade between them. Anything the user has already set is left alone.
+const STILL_MOTION_CYCLE = [
+  'zoom_in_center', 'pan_right_zoom', 'zoom_out_center', 'diagonal_tl_br',
+  'push_in_top', 'pan_left_zoom', 'zoom_in_center', 'diagonal_tr_bl',
+];
+const DEFAULT_STILL_TRANSITION = 'Gradual Fade';
+const DEFAULT_STILL_TRANSITION_SECONDS = 0.6;
+
+function defaultStillMotion(sceneNumber, hasVideo) {
+  if (hasVideo) return null; // real footage already moves
+  const n = Number(sceneNumber) || 0;
+  return STILL_MOTION_CYCLE[Math.abs(n) % STILL_MOTION_CYCLE.length];
+}
+
 const easingFunctions = {
   easeInOutQuad:  (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
   easeInQuad:     (t) => t * t,
@@ -994,9 +1010,9 @@ export default function TimelineEditor() {
           brollUrl:           existing?.brollUrl            || (hasBroll ? scene.broll_url  : null),
           brollSource:        existing?.brollSource         || scene.broll_source || null,
           brollQuery:         existing?.brollQuery          || scene.broll_query  || null,
-          cinematicMotion:    existing?.cinematicMotion     || null,
-          transition:         existing?.transition          || null,
-          transitionDuration: existing?.transitionDuration  ?? null,
+          cinematicMotion:    existing?.cinematicMotion     || defaultStillMotion(scene.scene_number, hasVideo),
+          transition:         existing?.transition          || (hasVideo ? null : DEFAULT_STILL_TRANSITION),
+          transitionDuration: existing?.transitionDuration  ?? (hasVideo ? null : DEFAULT_STILL_TRANSITION_SECONDS),
           motionSpeed:        existing?.motionSpeed          ?? 1.0,
           motionIntensity:    existing?.motionIntensity      ?? 1.0,
           playbackRate:       existing?.playbackRate         ?? 1.0,
@@ -1100,9 +1116,9 @@ export default function TimelineEditor() {
         // default left the clip blank.
         mediaType: existing?.mediaType || (hasVideo ? 'video' : (hasBroll && !scene.image_url ? 'broll' : 'image')),
         effects: existing?.effects || [],
-        cinematicMotion: existing?.cinematicMotion || null,
-        transition: existing?.transition || null,
-        transitionDuration: existing?.transitionDuration ?? null,
+        cinematicMotion: existing?.cinematicMotion || defaultStillMotion(scene.scene_number, hasVideo),
+        transition: existing?.transition || (hasVideo ? null : DEFAULT_STILL_TRANSITION),
+        transitionDuration: existing?.transitionDuration ?? (hasVideo ? null : DEFAULT_STILL_TRANSITION_SECONDS),
         motionSpeed: existing?.motionSpeed ?? 1.0,
         motionIntensity: existing?.motionIntensity ?? 1.0,
         playbackRate: existing?.playbackRate ?? 1.0,

@@ -17,9 +17,16 @@ const PROVIDERS = [
     color: 'border-gray-300 bg-gray-50',
     activeColor: 'border-yellow-500 bg-yellow-50 ring-2 ring-yellow-200',
   },
-  // Removed: Z-Image was never accepted by the scene pipeline (it silently became
-  // "auto"), and Seedream 4.5 is rejected by KIE, so picking it quietly rendered the
-  // scene with a different model. Put them back when the provider actually works.
+  {
+    id: 'z_image',
+    label: 'Z-Image',
+    emoji: '⚡',
+    desc: 'Cheapest by far ($0.004 vs $0.02) and fast. Short prompts only — no reference image, so characters vary more.',
+    color: 'border-gray-300 bg-gray-50',
+    activeColor: 'border-purple-500 bg-purple-50 ring-2 ring-purple-200',
+  },
+  // Seedream 4.5 stays out: KIE rejects its model id, so choosing it quietly rendered
+  // the scene on a different model. Put it back when the provider accepts it.
   {
     id: 'grok',
     label: 'Grok Imagine',

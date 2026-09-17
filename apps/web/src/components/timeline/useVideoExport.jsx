@@ -732,15 +732,69 @@ export default function useVideoExport() {
         };
       });
 
-      var clipMedia = await parallelBatch(preloadTasks, PRELOAD_CONCURRENCY, function(done, total) {
-        setProgress(Math.round((done / total) * 15));
-      });
+      // A 16-minute video built from stills is 200+ clips. Decoding every one before the
+      // first frame is rendered is well over a gigabyte of bitmaps and takes the tab down,
+      // so long timelines stream: a few clips are kept ready ahead of the playhead and
+      // released behind it. Short timelines keep the original preload-everything path.
+      var STREAM_ABOVE_CLIPS = 40;
+      var READ_AHEAD = 6;
+      var KEEP_BEHIND = 2; // the transition needs the frame of the clip just gone
+      var streaming = clips.length > STREAM_ABOVE_CLIPS;
+
+      var clipMedia = [];
+      var loadingMedia = new Map();
+      var releasedUpTo = -1;
+
+      if (!streaming) {
+        clipMedia = await parallelBatch(preloadTasks, PRELOAD_CONCURRENCY, function(done, total) {
+          setProgress(Math.round((done / total) * 15));
+        });
+      }
 
       if (cancelledRef.current) throw new Error('cancelled');
-      console.log('[Export] Preload done - starting CFR encode...');
+      console.log(streaming
+        ? '[Export] ' + clips.length + ' clips - streaming media during encode'
+        : '[Export] Preload done - starting CFR encode...');
       setPhase('encoding');
 
       var lastFrame = new Map();
+
+      function ensureClipMedia(i) {
+        if (i < 0 || i >= preloadTasks.length) return Promise.resolve(null);
+        if (clipMedia[i]) return Promise.resolve(clipMedia[i]);
+        var pending = loadingMedia.get(i);
+        if (pending) return pending;
+        var task = preloadTasks[i]().then(function(info) {
+          clipMedia[i] = info;
+          loadingMedia.delete(i);
+          return info;
+        }).catch(function(err) {
+          loadingMedia.delete(i);
+          console.warn('[Export] Clip ' + i + ' failed to load:', err.message);
+          return null;
+        });
+        loadingMedia.set(i, task);
+        return task;
+      }
+
+      function releaseClipMedia(i) {
+        var info = clipMedia[i];
+        if (!info) return;
+        var held = lastFrame.get(i);
+        if (held) {
+          try { if (held.close) held.close(); } catch (e) {}
+          lastFrame.delete(i);
+        }
+        var m = info.media;
+        try { if (m && typeof m.close === 'function' && m !== held) m.close(); } catch (e) {}
+        try { if (m && m._blobUrl) URL.revokeObjectURL(m._blobUrl); } catch (e) {}
+        clipMedia[i] = null;
+      }
+
+      if (streaming) {
+        await ensureClipMedia(0);
+        setProgress(15);
+      }
 
       var drawClipFrame = async function(ci, elapsedInClip) {
         var clip = clips[ci];
@@ -797,6 +851,16 @@ export default function useVideoExport() {
         var clip = clips[ci];
         var elapsed = absTime - clip.startTime;
         var prev = ci > 0 ? clips[ci - 1] : null;
+
+        if (streaming) {
+          await ensureClipMedia(ci);
+          // Warm the next few while this frame encodes, and let go of what is behind.
+          for (var ra = 1; ra <= READ_AHEAD; ra++) ensureClipMedia(ci + ra);
+          for (var rel = releasedUpTo + 1; rel < ci - KEEP_BEHIND; rel++) {
+            releaseClipMedia(rel);
+            releasedUpTo = rel;
+          }
+        }
 
         var tType = prev ? prev.transition : null;
         var tDur = prev && prev.transitionDuration !== undefined ? prev.transitionDuration : DEFAULT_TRANSITION_DURATION;

@@ -18,6 +18,7 @@ const prefixes = {
   grok: 'grok_img_task:',
   nano: 'nano_task:',
   nb2lite: 'nb2lite_task:',
+  zimage: 'zimage_task:',
 } as const;
 
 type Provider = keyof typeof prefixes;
@@ -69,6 +70,12 @@ async function submitProvider(
       aspect_ratio: aspectRatio,
       ...(useReference ? { image_urls: [referenceImageUrl] } : {}),
     });
+  }
+
+  if (provider === 'zimage') {
+    // Short-prompt model: cleanPrompt already trimmed to 1500, and generateSceneImage
+    // compacts to ~950 on submit. Text-to-image only, no reference support.
+    return createImageTask(ctx, 'z-image', { prompt: prompt.slice(0, 950), aspect_ratio: aspectRatio });
   }
 
   if (provider === 'grok') {
@@ -210,7 +217,7 @@ const handler: FnHandler = async (body, ctx) => {
           continue;
         }
 
-        const fallbackProvider: Provider | null = task.provider === 'seedream' || task.provider === 'nb2lite'
+        const fallbackProvider: Provider | null = task.provider === 'seedream' || task.provider === 'nb2lite' || task.provider === 'zimage'
           ? 'grok'
           : task.provider === 'grok'
             ? 'nano'

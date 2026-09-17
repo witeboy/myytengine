@@ -5,6 +5,7 @@
 
 import { HttpError } from '../lib/http';
 import { isBrollOnlyStyle } from '../lib/visualStyles';
+import { compactPrompt } from '../lib/promptCompaction';
 import type { FnHandler } from '../types';
 
 
@@ -23,6 +24,8 @@ const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
 const MAX_CONCURRENT = 4;           // Parallel SUBMIT jobs (submits are fast ~1-2s each)
 const MAX_RETRIES = 2;              // Retries per provider submit
 const SEEDREAM_MAX_PROMPT_CHARS = 4000;
+// Z-Image's own cap is ~1000; leave room so nothing is clipped at the edge.
+const Z_IMAGE_MAX_PROMPT_CHARS = 950;
 const RETRY_BASE_MS = 2000;         // Base delay for exponential backoff 
 
 // ─────────────────────────────────────────────
@@ -187,6 +190,17 @@ function preparePromptForProvider(rawPrompt, provider = 'grok', isSleep = false)
   // Seedream: 4000 chars
   // Nano: 1500 chars
   // Nano Banana 2 Lite: 4000 chars (the model accepts 20,000)
+  // Z-Image takes about a thousand characters. Truncating at the limit removed the style
+  // tail — lighting, palette, lens — which is exactly what makes the frame match the rest
+  // of the film, so its images came back flat. Keep the subject AND the look instead.
+  if (provider === 'z_image') {
+    const compacted = compactPrompt(p, Z_IMAGE_MAX_PROMPT_CHARS);
+    if (compacted.length < p.length) {
+      console.log(`✂️ Z-Image: ${p.length} → ${compacted.length} chars (subject + style kept)`);
+    }
+    return compacted;
+  }
+
   const maxChars = provider === 'seedream' || provider === 'nano_banana_2_lite' ? SEEDREAM_MAX_PROMPT_CHARS : 1500;
 
   if (p.length > maxChars) {
@@ -314,7 +328,8 @@ async function processScene(ctx, scene, project, kieApiKey, aspectRatio, referen
       : ['nano_banana_2_lite', 'grok', 'nano_banana'];
   } else {
     // User explicitly picked a provider — use it FIRST, then fallback to others
-    const allProviders = ['nano_banana_2_lite', 'seedream', 'grok', 'nano_banana'];
+    // Seedream is left out: KIE rejects its model id, so it only wastes an attempt.
+    const allProviders = ['nano_banana_2_lite', 'z_image', 'grok', 'nano_banana'];
     providers = [providerPref, ...allProviders.filter(p => p !== providerPref)];
     // Filter out unavailable providers
     providers = providers.filter(p => {
@@ -347,7 +362,15 @@ async function processScene(ctx, scene, project, kieApiKey, aspectRatio, referen
       // Each provider gets its own length-optimized prompt
       const providerPrompt = preparePromptForProvider(finalPrompt, provider, isSleepProject);
 
-      if (provider === 'seedream') {
+      if (provider === 'z_image') {
+        // Cheapest of the four by a wide margin ($0.004), text-to-image only — no
+        // reference image support, so character consistency rests on the prompt.
+        taskId = await kieCreateTask(kieApiKey, "z-image", {
+          prompt: providerPrompt,
+          aspect_ratio: aspectRatio
+        });
+        taskPrefix = 'zimage_task';
+      } else if (provider === 'seedream') {
         taskId = await submitSeedream(kieApiKey, providerPrompt, aspectRatio);
         taskPrefix = 'seedream_task';
       } else if (provider === 'nano_banana_2_lite') {
@@ -510,7 +533,7 @@ const handler: FnHandler = async (body, ctx) => {
     let providerPref = preferred_provider || project?.image_provider || 'auto';
     if (typeof providerPref === 'string' && providerPref.endsWith('_seedream')) providerPref = 'seedream';
     // Validate
-    if (!['auto', 'nano_banana_2_lite', 'seedream', 'grok', 'nano_banana'].includes(providerPref)) providerPref = 'auto';
+    if (!['auto', 'z_image', 'nano_banana_2_lite', 'seedream', 'grok', 'nano_banana'].includes(providerPref)) providerPref = 'auto';
 
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`🎨 IMAGE SUBMIT — ${scenesToProcess.length} scenes`);
