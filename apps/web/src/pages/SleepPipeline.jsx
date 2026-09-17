@@ -10,7 +10,7 @@ import SleepScriptStage from '@/components/sleep/SleepScriptStage';
 import SleepVisualsStage from '@/components/sleep/SleepVisualsStage';
 import SleepMusicStage from '@/components/sleep/SleepMusicStage';
 import {
-  ArrowLeft, Moon, Sparkles, ImageIcon, Music,
+  ArrowLeft, Moon, Sparkles, ImageIcon, Music, Mic,
   Film, ArrowRight, CheckCircle2, Circle, Loader2
 } from 'lucide-react';
 
@@ -119,10 +119,23 @@ export default function SleepPipeline() {
             </div>
             <p className="text-sm text-white/50">{project.video_duration_minutes || 15} min · Ambient Sleep Pipeline</p>
           </div>
-          {activeStage === 'handoff' && (
+          {/* These used to appear only once script, images AND music were all finished,
+              so a sleep project had no way to reach its narration — the format's main
+              ingredient — or the timeline until everything else was done. */}
+          {scriptReady && (
+            <Button
+              variant="outline"
+              onClick={() => navigate(createPageUrl(`ContentGeneration?project_id=${projectId}`))}
+              className="border-white/20 bg-white/5 text-white hover:bg-white/10 gap-2"
+              title="Record or upload narration, add sound and animate scenes"
+            >
+              <Mic className="w-4 h-4" /> Voiceover & Audio
+            </Button>
+          )}
+          {scriptReady && (
             <Button
               onClick={() => navigate(createPageUrl(`TimelineEditor?project_id=${projectId}`))}
-              className="bg-indigo-600 hover:bg-indigo-700 gap-2"
+              className={activeStage === 'handoff' ? 'bg-indigo-600 hover:bg-indigo-700 gap-2' : 'bg-white/10 hover:bg-white/20 gap-2'}
             >
               Timeline <ArrowRight className="w-4 h-4" />
             </Button>

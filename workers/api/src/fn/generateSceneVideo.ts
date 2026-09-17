@@ -54,7 +54,8 @@ const MOTION_CONTRACT =
 // Seedance takes a single prompt string; keep the description from crowding out the rules.
 const MAX_PROMPT_CHARS = 1800;
 
-function animationPrompt(raw) {
+// Exported for the test that guards the motion rules.
+export function animationPrompt(raw) {
   const text = (raw || "").trim();
   let described;
   if (!text) {

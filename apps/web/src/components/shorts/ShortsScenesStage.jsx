@@ -28,8 +28,20 @@ export default function ShortsScenesStage({ projectId, project, scenes, onRefetc
 
       setPhase('Breaking script into visual scenes...');
       await api.functions.invoke('shortsSceneBreakdown', { project_id: projectId });
+      // generateScenePrompts writes ONE batch of about six scenes per call, so a single
+      // call left roughly 34 of a 40-scene short holding raw director notes instead of a
+      // prompt — and the stage never unlocked.
       setPhase('Generating image prompts...');
-      await api.functions.invoke('generateScenePrompts', { project_id: projectId });
+      let promptsDone = false;
+      for (let attempt = 0; attempt < 30 && !promptsDone; attempt++) {
+        const resp = await api.functions.invoke('generateScenePrompts', { project_id: projectId });
+        promptsDone = (resp?.data || resp)?.done === true;
+        const fresh = await api.entities.Scenes.filter({ project_id: projectId });
+        const ready = fresh.filter(s => s.status === 'prompts_ready').length;
+        setPhase(`Generating image prompts... ${ready}/${fresh.length}`);
+        if (fresh.length > 0 && fresh.every(s => s.status !== 'breakdown_ready')) promptsDone = true;
+      }
+      if (!promptsDone) throw new Error('Some scenes still have no image prompt. Run "Convert Notes → Prompts" on the Content page.');
       setPhase('Scenes ready!');
       await onRefetch();
     } catch (err) {

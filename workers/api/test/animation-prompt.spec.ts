@@ -1,14 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
 
-// animationPrompt is module-private in the handler, so it is lifted out the same way the
-// handler defines it. This keeps the test honest about the real source.
-const source = readFileSync(new URL('../src/fn/generateSceneVideo.ts', import.meta.url), 'utf8');
-const start = source.indexOf('const CAMERA_PHRASES');
-const end = source.indexOf('const handler');
-const animationPrompt: (raw: string | null) => string = new Function(
-  `${source.slice(start, end)}\nreturn animationPrompt;`,
-)();
+import { animationPrompt } from '../src/fn/generateSceneVideo';
 
 describe('animationPrompt', () => {
   it('turns a bare camera word into a sentence', () => {

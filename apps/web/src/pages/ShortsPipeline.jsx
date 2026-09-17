@@ -243,8 +243,21 @@ export default function ShortsPipeline() {
       const result = await api.functions.invoke('shortsSceneBreakdown', { project_id: projectId });
       const data = result?.data || result;
       if (data?.error) throw new Error(data.error);
+
+      // The breakdown only writes director notes. Without this the scenes stayed
+      // unprompted, the next stage never unlocked, and the page told the user to go and
+      // run prompts on another page.
+      let promptsDone = false;
+      for (let attempt = 0; attempt < 30 && !promptsDone; attempt++) {
+        const resp = await api.functions.invoke('generateScenePrompts', { project_id: projectId });
+        promptsDone = (resp?.data || resp)?.done === true;
+        const fresh = await api.entities.Scenes.filter({ project_id: projectId });
+        if (fresh.length > 0 && fresh.every(s => s.status !== 'breakdown_ready')) promptsDone = true;
+      }
+
       await refetchScenes();
       await refetchProject();
+      if (!promptsDone) throw new Error('Scenes were created but some have no image prompt yet. Open Content Generation and run "Convert Notes → Prompts".');
     } catch (err) {
       console.error('Breakdown failed:', err);
       setBreakdownError(err.message || 'Scene breakdown failed — try again');

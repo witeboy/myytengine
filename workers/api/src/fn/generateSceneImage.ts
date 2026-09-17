@@ -237,6 +237,13 @@ async function processScene(ctx, scene, project, kieApiKey, aspectRatio, referen
     return { scene_id: scene.id, scene_number: sceneNum, status: 'skipped', reason: 'no_prompt' };
   }
 
+  // A scene still holding the breakdown's director notes has no prompt yet. Submitting it
+  // sends raw DIRECTOR_NOTES JSON to the image provider as the prompt — a paid-for picture
+  // of nothing. Prompts have to be generated first.
+  if (typeof scene.image_prompt === 'string' && scene.image_prompt.startsWith('DIRECTOR_NOTES:')) {
+    return { scene_id: scene.id, scene_number: sceneNum, status: 'skipped', reason: 'needs_prompts' };
+  }
+
   // Skip if already generated or already pending — unless the user asked for this scene
   // again. Regenerate used to hit this skip and return 200 with nothing done, so the
   // button spun, reported success, and produced the same picture.

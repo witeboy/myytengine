@@ -549,6 +549,60 @@ export default function ContentGeneration() {
   };
 
   // ═══════════════════════════════════════════════════════════════
+  // EXPLAINER BREAKDOWN LOOP
+  // Two sections per call. It used to stop after ten calls with no warning and no way
+  // back in: the integrity banner was suppressed for explainer and Resume ran the
+  // standard breakdown, which the pipeline guard refuses for this mode.
+  // ═══════════════════════════════════════════════════════════════
+  const runExplainerBreakdown = async ({ onProgress } = {}) => {
+    const notify = onProgress || (() => {});
+    let breakdownDone = false;
+    let nextSection = 0;
+    let totalSections = 6;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 30;
+
+    while (!breakdownDone && attempts < MAX_ATTEMPTS) {
+      attempts++;
+      try {
+        const bdResult = await api.functions.invoke('explainerSceneBreakdown', {
+          project_id: projectId,
+          start_section: nextSection,
+        });
+        const bdData = bdResult?.data || bdResult;
+        if (bdData?.error) throw new Error(bdData.error);
+
+        breakdownDone = bdData.done === true;
+        nextSection = bdData.next_section ?? nextSection;
+        totalSections = bdData.total_sections || totalSections;
+
+        const freshScenes = await api.entities.Scenes.filter({ project_id: projectId });
+        queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
+        setTotalExpectedScenes(Math.max(freshScenes.length, totalSections * 5));
+        notify(
+          breakdownDone
+            ? `Created ${freshScenes.length} educational scenes — generating image prompts...`
+            : `Breaking down sections ${nextSection}/${totalSections} — ${freshScenes.length} scenes so far...`
+        );
+      } catch (err) {
+        const status = err?.response?.status || err?.status;
+        if (status === 502 || status === 504) {
+          // The call is probably still running server-side; wait it out.
+          await waitForSceneQuiet(notify, (scenes) => `${scenes.length} scenes`);
+          continue;
+        }
+        throw err;
+      }
+      if (!breakdownDone) await new Promise(r => setTimeout(r, 1500));
+    }
+
+    if (!breakdownDone) {
+      const fresh = await api.entities.Scenes.filter({ project_id: projectId });
+      throw new Error(`Breakdown stopped with ${fresh.length} scenes. Use "Resume breakdown" to continue.`);
+    }
+  };
+
+  // ═══════════════════════════════════════════════════════════════
   // B-ROLL ONLY: stock footage instead of generated images
   // Matches every scene to a Pexels/Pixabay clip, 20 scenes per call.
   // ═══════════════════════════════════════════════════════════════
@@ -861,8 +915,12 @@ export default function ContentGeneration() {
     setImportPhase('breakdown');
     try {
       setImportProgress('Resuming breakdown. Finished scenes are kept...');
-      if (isLongViralModeFn(resolveProjectMode(project, null).mode)) {
+      const resumeMode = resolveProjectMode(project, null).mode;
+      if (isLongViralModeFn(resumeMode)) {
         await runLongViralBreakdown({ resume: true, onProgress: setImportProgress });
+      } else if (isExplainerModeFn(resumeMode)) {
+        // Sections already written are skipped server-side.
+        await runExplainerBreakdown({ onProgress: setImportProgress });
       } else {
         // Batch 1 reuses the saved story analysis; finished phases are skipped server-side.
         await runStandardBreakdown(1);
@@ -1069,45 +1127,7 @@ export default function ContentGeneration() {
 
         // Step 3: Explainer scene breakdown — batched/resumable (2 sections per call)
         setImportProgress('Breaking down script into educational scenes and diagrams...');
-        let breakdownDone = false;
-        let nextSection = 0;
-        let totalSections = 6;
-        let attempts = 0;
-        const MAX_ATTEMPTS = 10;
-
-        while (!breakdownDone && attempts < MAX_ATTEMPTS) {
-          attempts++;
-          try {
-            const bdResult = await api.functions.invoke('explainerSceneBreakdown', {
-              project_id: projectId,
-              start_section: nextSection,
-            });
-            const bdData = bdResult?.data || bdResult;
-            if (bdData?.error) throw new Error(bdData.error);
-
-            breakdownDone = bdData.done === true;
-            nextSection = bdData.next_section ?? nextSection;
-            totalSections = bdData.total_sections || totalSections;
-
-            const freshScenes = await api.entities.Scenes.filter({ project_id: projectId });
-            queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
-            setTotalExpectedScenes(Math.max(freshScenes.length, totalSections * 5));
-            setImportProgress(
-              breakdownDone
-                ? `✅ Created ${freshScenes.length} educational scenes — generating image prompts...`
-                : `Breaking down sections ${nextSection}/${totalSections} — ${freshScenes.length} scenes so far...`
-            );
-          } catch (err) {
-            const status = err?.response?.status || err?.status;
-            if (status === 502 || status === 504) {
-              setImportProgress(`Section ${nextSection + 1} taking long — retrying in 8s...`);
-              await new Promise(r => setTimeout(r, 8000));
-              continue;
-            }
-            throw err;
-          }
-          if (!breakdownDone) await new Promise(r => setTimeout(r, 1500));
-        }
+        await runExplainerBreakdown({ onProgress: setImportProgress });
 
         // Step 4: Convert director notes → image prompts
         setImportPhase('prompts');
@@ -1643,7 +1663,9 @@ export default function ContentGeneration() {
     if (!project || scenes.length === 0) return null;
     // Long Viral is driven by the page across many calls, so a closed tab leaves it
     // part-way through with no sign of it. The project is only marked complete at the end.
-    if (isLongViralModeFn(resolvedUiMode)) {
+    // Both of these are driven from this page across many calls, so a closed tab or a
+    // capped loop leaves them part-way through with nothing to show for it.
+    if (isLongViralModeFn(resolvedUiMode) || isExplainerModeFn(resolvedUiMode)) {
       if (project.status === 'breakdown_complete' || project.current_step > 5) return null;
       return {
         kind: 'incomplete',
@@ -1651,7 +1673,7 @@ export default function ContentGeneration() {
         detail: 'The rest of the script has no scenes yet. Resume to create them; finished scenes are kept.',
       };
     }
-    if (isShortsProject || isSleepModeFn(resolvedUiMode) || isExplainerModeFn(resolvedUiMode)) return null;
+    if (isShortsProject || isSleepModeFn(resolvedUiMode)) return null;
     const counts = {};
     for (const s of scenes) counts[s.scene_number] = (counts[s.scene_number] || 0) + 1;
     const duplicated = Object.values(counts).filter(c => c > 1).length;
