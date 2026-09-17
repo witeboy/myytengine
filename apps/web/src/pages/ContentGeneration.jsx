@@ -529,6 +529,26 @@ export default function ContentGeneration() {
   // Shared helper used by both auto-import and manual button.
   // Works for ALL project types (Shorts and standard).
   // ═══════════════════════════════════════════════════════════════
+  // A gateway timeout does NOT stop the server: the call keeps running and keeps writing
+  // scenes. Re-sending straight away put a second copy alongside it, paying twice for the
+  // same work. Wait until the database stops changing, then continue.
+  const waitForSceneQuiet = async (notify, describe) => {
+    const count = async () => {
+      const fresh = await api.entities.Scenes.filter({ project_id: projectId });
+      queryClient.setQueryData(['scenes', projectId], fresh.sort((a, b) => a.scene_number - b.scene_number));
+      return fresh;
+    };
+    let previous = describe(await count());
+    for (let i = 0; i < 12; i++) {
+      await new Promise(r => setTimeout(r, 10000));
+      const fresh = await count();
+      const now = describe(fresh);
+      notify(`The last batch is still running — ${now} so far...`);
+      if (now === previous) return;
+      previous = now;
+    }
+  };
+
   // ═══════════════════════════════════════════════════════════════
   // B-ROLL ONLY: stock footage instead of generated images
   // Matches every scene to a Pexels/Pixabay clip, 20 scenes per call.
@@ -595,11 +615,9 @@ export default function ContentGeneration() {
       } catch (err) {
         const status = err?.response?.status || err?.status;
         if (status === 500 || status === 502 || status === 504) {
-          console.log(`generateScenePrompts error ${status} on attempt ${attempts}, retrying in 8s...`);
-          await new Promise(r => setTimeout(r, 8000));
-
+          console.log(`generateScenePrompts error ${status} on attempt ${attempts}, waiting for the running batch...`);
+          await waitForSceneQuiet(notify, (scenes) => `${scenes.filter(s => s.status === 'prompts_ready').length}/${scenes.length} prompts ready`);
           const freshScenes = await api.entities.Scenes.filter({ project_id: projectId });
-          queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
           const ready = freshScenes.filter(s => s.status === 'prompts_ready');
           notify(`Recovering... ${ready.length}/${freshScenes.length} prompts ready`);
           continue;
@@ -623,6 +641,7 @@ export default function ContentGeneration() {
   const runLongViralBreakdown = async ({ resume = false, onProgress } = {}) => {
     const notify = onProgress || (() => {});
     let breakdownDone = false;
+    let resumeMode = resume;
     let nextBatch = resume ? null : 0; // null = let the server find where to pick up
     let totalBatches = 1;
     let attempts = 0;
@@ -631,8 +650,10 @@ export default function ContentGeneration() {
     while (!breakdownDone && attempts < MAX_ATTEMPTS) {
       attempts++;
       try {
+        // resume must travel with every call once set: without it the server treats
+        // start_batch 0 as a fresh run and deletes the scenes already created.
         const payload = { project_id: projectId };
-        if (resume) payload.resume = true;
+        if (resumeMode) payload.resume = true;
         if (nextBatch !== null) payload.start_batch = nextBatch;
 
         const bdResult = await api.functions.invoke('longViralSceneBreakdown', payload);
@@ -654,8 +675,12 @@ export default function ContentGeneration() {
       } catch (err) {
         const status = err?.response?.status || err?.status;
         if (status === 502 || status === 504) {
-          notify('Batch taking long — retrying in 8s...');
-          await new Promise(r => setTimeout(r, 8000));
+          // The Worker is almost certainly still writing this batch — wait it out rather
+          // than starting a second copy of the same work.
+          await waitForSceneQuiet(notify, (scenes) => `${scenes.length} scenes`);
+          // Pick up from the first missing scene, keeping everything already written.
+          resumeMode = true;
+          nextBatch = null;
           continue;
         }
         throw err;

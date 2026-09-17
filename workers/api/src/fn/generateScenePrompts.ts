@@ -15,7 +15,11 @@ import { resolveStyleId, styleMapForEngines } from '../lib/visualStyles';
 // ══════════════════════════════════════════════════════════════════
 
 
-const BASE_BATCH_SIZE = 12;
+// Scenes per call. One Gemini call writes the whole batch, so this is what decides how
+// long a request takes — and the app is reached through a proxy that kills a request at
+// around a minute, after which the browser retries and pays for the same work twice.
+// Six scenes keeps a call comfortably inside that window.
+const BASE_BATCH_SIZE = 6;
 
 // ══════════════════════════════════════════════════════════════════
 // OPENAI PROMPT CLEANER — structures messy prompts for image gen
@@ -1221,7 +1225,8 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
     // Adaptive batch size: 12 for first 60 scenes, 8 for 60-200, 6 for 200+
     const totalPendingScenes = pendingScenes.length;
     const completedSoFar = allScenes.filter(s => s.status === 'prompts_ready').length;
-    const BATCH_SIZE = completedSoFar > 200 ? 6 : completedSoFar > 60 ? 8 : BASE_BATCH_SIZE;
+    // Later batches carry more continuity context, so they run slower for the same count.
+    const BATCH_SIZE = completedSoFar > 200 ? 4 : completedSoFar > 60 ? 5 : BASE_BATCH_SIZE;
     console.log(`📦 Batch size: ${BATCH_SIZE} (${completedSoFar} scenes already completed)`);
 
 

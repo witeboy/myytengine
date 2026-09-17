@@ -130,7 +130,10 @@ function getSectionLabel(pct) {
 const BEATS_PER_SUBBATCH = 20;
 // Sub-batches processed per HTTP call. Each sub-batch is one Gemini call.
 // 2 keeps each call well under the 180s timeout even on slow days. Frontend loops with start_batch.
-const CHUNKS_PER_CALL = 2;
+// One sub-batch is one Gemini call of ~47s. Two of them per request ran ~95s, which the
+// proxy in front of this Worker cuts off at around a minute: the browser then saw 502,
+// retried, and a second copy redid work the first was still doing.
+const CHUNKS_PER_CALL = 1;
 
 function chunkBeats(beats) {
   const chunks = [];
