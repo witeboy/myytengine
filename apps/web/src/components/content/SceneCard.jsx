@@ -3,10 +3,9 @@ import { api } from '@/api/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, ImageIcon, Film, Settings2, RefreshCw, Wrench, Check, ChevronDown } from 'lucide-react';
+import { Loader2, ImageIcon, Film, Settings2, Wrench, Check, ChevronDown } from 'lucide-react';
 import AnimationEditor from './AnimationEditor';
 import SceneSfxEditor from './SceneSfxEditor';
-import PromptEnhancer from './PromptEnhancer';
 import PromptEditor from './PromptEditor';
 import BrollPreview from './BrollPreview';
 import ProviderRegenButtons from './ProviderRegenButtons';
@@ -171,7 +170,6 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
   const [loadingVideo, setLoadingVideo] = useState(false);
   const [polling, setPolling] = useState(false);
   const [showAnimEditor, setShowAnimEditor] = useState(false);
-  const [rephrasing, setRephrasing] = useState(false);
   const pollRef = useRef(null);
   const pollFailuresRef = useRef(0);
 
@@ -238,19 +236,6 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
     setLoadingImage(false);
   };
 
-  const handleRephrase = async () => {
-    setRephrasing(true);
-    try {
-      await api.functions.invoke('rephraseScenePrompt', { scene_id: scene.id });
-      onSceneUpdated?.();
-    } catch (err) {
-      // Without this the button sat on "Rephrasing..." forever after any failure.
-      console.warn('Rephrase failed:', err?.response?.data?.error || err.message);
-    } finally {
-      setRephrasing(false);
-    }
-  };
-
   const handleVideo = async () => {
     setLoadingVideo(true);
     try {
@@ -296,9 +281,6 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
           <summary className="cursor-pointer text-blue-600 font-medium">Edit Prompts</summary>
           <div className="mt-2 space-y-2">
             <PromptEditor scene={scene} onSaved={onSceneUpdated} onRegenerateImage={handleImage} />
-            <div className="pt-2 border-t border-dashed">
-              <PromptEnhancer scene={scene} onEnhanced={onSceneUpdated} />
-            </div>
           </div>
         </details>
 
@@ -312,14 +294,6 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
               <Badge variant="outline" className="text-[10px]">{scene.animation_speed}</Badge>
             )}
           </div>
-        )}
-
-        {/* Rephrase button for failed/no-image scenes */}
-        {(scene.status === 'failed' || (scene.status === 'prompts_ready' && !scene.image_url)) && (
-          <Button size="sm" variant="outline" onClick={handleRephrase} disabled={rephrasing} className="w-full border-amber-300 text-amber-700 hover:bg-amber-50">
-            {rephrasing ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />}
-            {rephrasing ? 'Rephrasing...' : 'Rephrase Prompt (Policy Fix)'}
-          </Button>
         )}
 
         {/* Fix Prompt — inject characters, clean metadata, check quality */}

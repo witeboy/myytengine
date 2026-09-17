@@ -25,7 +25,7 @@ import { toast } from '@/components/ui/use-toast';
 import { Link } from 'react-router-dom';
 import {
   Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film,
-  Palette, Sparkles, Monitor, Clapperboard, Wand2, CheckCircle2,
+  Palette, Monitor, Clapperboard, Wand2, CheckCircle2,
   XCircle, Clock, Zap, Video, FolderDown, Mic, Music, Volume2, Home,
   FileText, RefreshCw, AlertTriangle
 } from 'lucide-react';
@@ -464,7 +464,6 @@ export default function ContentGeneration() {
   const [generatingImages, setGeneratingImages] = useState(false);
   const [generatingVideos, setGeneratingVideos] = useState(false);
   const [audioLevels, setAudioLevels] = useState({ narration: 1, music: 0.3, sfx: 0.5 });
-  const [enhancingAll, setEnhancingAll] = useState(false);
   const [retryingPrompts, setRetryingPrompts] = useState(false);
   // ── NEW: dedicated state for converting director notes → prompts ──
   const [convertingPrompts, setConvertingPrompts] = useState(false);
@@ -1408,24 +1407,6 @@ export default function ContentGeneration() {
     finally { await refetchScenes(); setRetryingPrompts(false); }
   };
 
-  // ── Enhance All ────────────────────────────────────────────────
-  // Guard: skip scenes that still have DIRECTOR_NOTES: (not yet converted) —
-  // these cause enhanceScenePrompts to 500 since there's no real prompt to enhance.
-  const handleEnhanceAll = async () => {
-    setEnhancingAll(true);
-    const enhanceable = scenes.filter(s =>
-      s.image_prompt &&
-      !s.image_prompt.startsWith('DIRECTOR_NOTES:') &&
-      (s.status === 'prompts_ready' || s.status === 'image_generated')
-    );
-    for (const scene of enhanceable) {
-      try { await api.functions.invoke('enhanceScenePrompts', { scene_id: scene.id, enhance_type: 'both' }); }
-      catch (err) { console.warn(`Scene ${scene.scene_number} enhance failed:`, err.message); }
-      await refetchScenes();
-    }
-    setEnhancingAll(false);
-  };
-
   // ── Export ZIP ────────────────────────────────────────────────
   const loadJSZip = async () => {
     if (window.JSZip) return window.JSZip;
@@ -2112,11 +2093,6 @@ export default function ContentGeneration() {
                   }
                 </Button>
               )}
-
-              <Button onClick={handleEnhanceAll} disabled={enhancingAll} variant="outline" className="border-purple-200 text-purple-700 hover:bg-purple-50">
-                {enhancingAll ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Sparkles className="w-4 h-4 mr-1" />}
-                {enhancingAll ? 'Enhancing...' : 'AI Enhance All'}
-              </Button>
 
               <FixPromptsButton
                 projectId={projectId}

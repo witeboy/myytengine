@@ -2,11 +2,11 @@
 //
 // WHY THIS EXISTS
 // ---------------
-// The style map used to be copy-pasted into generateScenePrompts, enhanceScenePrompts and
-// rephraseScenePrompt. They drifted: two styles existed in only one of the three, so
-// enhancing or rephrasing a prompt in those styles silently fell back to the default and
-// the look changed mid-project. The picker was a fourth, separate list, which is how a
-// style with no engine entry at all (broll_only) shipped as a card that did nothing.
+// The style map used to be copy-pasted into three prompt engines, which drifted: two
+// styles existed in only one of them, so a prompt written by another engine silently fell
+// back to the default and the look changed mid-project. (Two of those engines have since
+// been removed — they were broken duplicates.) The picker was a fourth, separate list,
+// which is how a style with no engine entry at all (broll_only) shipped as a dead card.
 //
 // The catalogue lives in shared/visual-styles.json so the web picker imports the SAME file.
 //

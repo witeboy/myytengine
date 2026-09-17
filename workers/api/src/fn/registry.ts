@@ -19,7 +19,6 @@ import invokeLLM from './invokeLLM';
 import callClaudeProxy from './callClaudeProxy';
 import cleanScenePrompt from './cleanScenePrompt';
 import dedupScenes from './dedupScenes';
-import enhanceScenePrompts from './enhanceScenePrompts';
 import explainerSceneBreakdown from './explainerSceneBreakdown';
 import fixScenePrompts from './fixScenePrompts';
 import generateFullScript from './generateFullScript';
@@ -30,7 +29,6 @@ import generateScriptBatches from './generateScriptBatches';
 import initializeScriptBatches from './initializeScriptBatches';
 import longViralGenerateScript from './longViralGenerateScript';
 import longViralSceneBreakdown from './longViralSceneBreakdown';
-import rephraseScenePrompt from './rephraseScenePrompt';
 import selectHook from './selectHook';
 import shortsGenerateScript from './shortsGenerateScript';
 import shortsSceneBreakdown from './shortsSceneBreakdown';
@@ -90,18 +88,18 @@ export const FUNCTIONS: Record<string, FnHandler> = {
   longViralSceneBreakdown,
   explainerSceneBreakdown,
   generateScenePrompts,
-  enhanceScenePrompts,
   cleanScenePrompt,
   fixScenePrompts,
-  rephraseScenePrompt,
   dedupScenes,
   shortsGenerateScript,
   longViralGenerateScript,
   //
-  // NOT ported: `enhancePrompt` is byte-identical to rephraseScenePrompt and only an
-  // orphan calls it. If something ever needs the name, alias it to the same module
-  // rather than duplicating 85KB:  enhancePrompt: rephraseScenePrompt
-  // Also orphans, deliberately unported: cleanScript, editScript, rewriteOutro.
+  // Removed: enhanceScenePrompts and rephraseScenePrompt were near-copies of
+  // generateScenePrompts that only accepted a project and only touched breakdown_ready
+  // scenes, while both of their buttons called them for a single scene — so every call
+  // 404'd and "Enhance All" reported success having done nothing. Prompt repair lives in
+  // fixScenePrompts (characters, metadata, quality) and cleanScenePrompt (OpenAI clean-up).
+  // Also orphans, deliberately unported: enhancePrompt, cleanScript, editScript, rewriteOutro.
 
   // ── Phase 7 · image & video ───────────────────────────────────────────────
   // uploadToR2 and proxyFetchAsset are already wired above. The remaining 14 come
