@@ -264,6 +264,12 @@ function UploadVoiceoverPanel({ project, onUpdate, settings, setSettings }) {
     if (!file || !project?.id) return;
     setUploading(true); setError(''); setSaved(false);
     try {
+      // The API accepts a request body up to 100MB; anything larger is refused by the
+      // platform with no useful message, so say it plainly here.
+      if (file.size > 90 * 1024 * 1024) {
+        throw new Error(`That file is ${(file.size / (1024 * 1024)).toFixed(0)}MB. The limit is 90MB — export it as MP3 (or a lower bitrate) and upload again.`);
+      }
+
       const uploaded = await api.integrations.Core.UploadFile({ file });
       const voiceoverUrl = uploaded?.file_url;
       if (!voiceoverUrl) throw new Error('Upload returned no file URL.');
@@ -282,7 +288,15 @@ function UploadVoiceoverPanel({ project, onUpdate, settings, setSettings }) {
         ? await api.entities.ProductionSettings.update(settings.id, payload)
         : await api.entities.ProductionSettings.create(payload);
       await api.entities.Projects.update(project.id, { voiceover_url: voiceoverUrl });
-      setSettings(savedSettings || { ...settings, ...payload });
+      // Read it back rather than trusting the write: "Ready" must mean the timeline will
+      // actually find this audio, on this project.
+      const confirmed = (await api.entities.ProductionSettings.filter({ project_id: project.id }))
+        .find(row => row.voiceover_url === voiceoverUrl);
+      if (!confirmed) {
+        throw new Error('The file uploaded but this project did not save it. Reload the page and try once more.');
+      }
+
+      setSettings(confirmed || savedSettings || { ...settings, ...payload });
       setSaved(true);
       onUpdate?.();
     } catch (err) {

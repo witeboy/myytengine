@@ -1548,6 +1548,18 @@ export default function TimelineEditor() {
       {voiceoverUrl && <audio ref={audioRef} src={voiceoverUrl} preload="auto" />}
       {musicUrl && <audio ref={musicRef} src={musicUrl} preload="auto" loop />}
 
+      {/* Without this, a project with no voiceover looked identical to one whose audio
+          failed to load — the editor simply fell back to estimated timings in silence. */}
+      {prodSettings && !voiceoverUrl && (
+        <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2 text-xs text-amber-200 flex items-center gap-2">
+          <Mic size={14} className="shrink-0" />
+          <span>
+            This project has no voiceover yet, so scene timings are estimates and AutoSync cannot run.
+            Generate or upload one on the Content page — check you are on the same project.
+          </span>
+        </div>
+      )}
+
       <TopToolbar
         activePanel={activePanel} onPanelChange={setActivePanel}
         projectName={project?.name} onBack={handleBack}
