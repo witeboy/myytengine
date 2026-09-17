@@ -41,7 +41,6 @@ import generateProgressionPrompts from './generateProgressionPrompts';
 import generateProgressionVideo from './generateProgressionVideo';
 import generateSceneImage from './generateSceneImage';
 import generateSceneVideo from './generateSceneVideo';
-import generateThumbnailImage from './generateThumbnailImage';
 import pollSceneImage from './pollSceneImage';
 import pollSceneVideo from './pollSceneVideo';
 import pollThumbnailBlend from './pollThumbnailBlend';
@@ -106,7 +105,7 @@ export const FUNCTIONS: Record<string, FnHandler> = {
   // from `port-batch.mjs migration/tools/batches/phase7.json`:
   // generateSceneImage, pollSceneImage, generateSceneVideo, pollSceneVideo,
   // extractCharacterDNA, generateProgressionPrompts, generateProgressionImage,
-  // generateProgressionVideo, generateThumbnailImage, generateNewThumbnailImage,
+  // generateProgressionVideo, generateNewThumbnailImage,
   // pollThumbnailTask, thumbnailBlend, pollThumbnailBlend, detectFaceRegion
   generateSceneImage,
   pollSceneImage,
@@ -116,7 +115,6 @@ export const FUNCTIONS: Record<string, FnHandler> = {
   generateProgressionPrompts,
   generateProgressionImage,
   generateProgressionVideo,
-  generateThumbnailImage,
   generateNewThumbnailImage,
   pollThumbnailTask,
   thumbnailBlend,

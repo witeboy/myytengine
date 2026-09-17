@@ -162,10 +162,9 @@ const integrations = {
       return res?.data;
     },
 
-    GenerateImage: async (args) => {
-      const res = await request('/api/fn/generateImage', { body: args });
-      return res?.data;
-    },
+    // Removed: GenerateImage posted to /api/fn/generateImage, which is not a registered
+    // function — every call was a guaranteed 404. Scene images go through
+    // generateSceneImage + pollSceneImage.
   },
 };
 
