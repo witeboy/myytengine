@@ -188,7 +188,9 @@ const handler: FnHandler = async (body, ctx) => {
     // 'director' uses the beat plan from planSceneBeats — scenes break where the story
     // turns, and the count falls out of that. The word-count paces remain as fallbacks:
     // 'fast' (a cut every ~3s), 'standard' (~5s), 'cinematic' (~7s).
-    const pacing = String(project.scene_pacing || 'fast').toLowerCase();
+    // Director's beats is the default. It used to be 'fast' — a scene every seven words —
+    // so any project that never visited the blueprint screen still got hundreds of scenes.
+    const pacing = String(project.scene_pacing || 'director').toLowerCase();
     let allBeats;
     let planNote = '';
 

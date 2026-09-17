@@ -4,7 +4,9 @@ import { Loader2 } from 'lucide-react';
 
 const PROVIDERS = [
   { id: 'nano_banana_2_lite', label: 'Nano 2', emoji: '🍌', color: 'bg-yellow-50 border-yellow-200 text-yellow-700 hover:bg-yellow-100' },
-  { id: 'ai33_seedream', label: 'Seedream', emoji: '🌱', color: 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100' },
+  // Seedream is gone: KIE rejects its model id, so the chip silently rendered on another
+  // model. Z-Image is the cheap one — $0.004 against $0.02.
+  { id: 'z_image', label: 'Z-Image', emoji: '⚡', color: 'bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100' },
   { id: 'grok', label: 'Grok', emoji: '⚡', color: 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100' },
   { id: 'nano_banana', label: 'Nano', emoji: '🍌', color: 'bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100' },
 ];

@@ -696,7 +696,7 @@ export default function ContentGeneration() {
     // Director's beats: read the script for its turning points before cutting anything,
     // so the scene count comes from the story rather than from a word rule. Resumable —
     // the server remembers how far it has read.
-    if ((project?.scene_pacing || '') === 'director') {
+    if ((project?.scene_pacing || 'director') === 'director') {
       notify('Reading the script for its dramatic beats...');
       let planned = false;
       for (let attempt = 0; attempt < 30 && !planned; attempt++) {
