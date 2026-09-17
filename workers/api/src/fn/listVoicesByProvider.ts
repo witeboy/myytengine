@@ -70,11 +70,11 @@ const MY_CLONES = [
   { voice_id: 'moss_audio_f2cf397e-0e8c-11f1-bfa6-763108879732', name: 'DPO' },
 ];
 
-// AI33 cache
-let ai33Cache = null;
-let ai33CacheTime = 0;
+// AI33 cache, per user: the library is fetched with each user's own key and contains
+// their cloned voices, so a shared cache leaked them to whoever asked next.
+const ai33CacheByUser = new Map(); // userId -> { voices, at }
+const ai33InflightByUser = new Map(); // userId -> Promise
 const CACHE_TTL = 5 * 60 * 1000;
-let ai33Inflight = null;
 
 // The v2/v1m endpoints listVoices.ts has always used. They answer when v3 does not, so an
 // AI33 change to v3 empties the voice panel instead of breaking it.
@@ -286,20 +286,20 @@ const handler: FnHandler = async (body, ctx) => {
       const AI33_KEY = await ctx.keys.get('AI33_API_KEY');
       if (!AI33_KEY) throw new HttpError(500, 'AI33_API_KEY not configured');
 
-      if (ai33Cache && (Date.now() - ai33CacheTime) < CACHE_TTL) {
-        return { success: true, voices: ai33Cache, count: ai33Cache.length };
+      const cachedAi33 = ai33CacheByUser.get(user.id);
+      if (cachedAi33 && (Date.now() - cachedAi33.at) < CACHE_TTL) {
+        return { success: true, voices: cachedAi33.voices, count: cachedAi33.voices.length };
       }
 
-      if (!ai33Inflight) {
-        ai33Inflight = fetchAI33Voices(ctx).then(result => {
-          ai33Cache = result;
-          ai33CacheTime = Date.now();
-          ai33Inflight = null;
+      if (!ai33InflightByUser.has(user.id)) {
+        ai33InflightByUser.set(user.id, fetchAI33Voices(ctx).then(result => {
+          if (result.length > 0) ai33CacheByUser.set(user.id, { voices: result, at: Date.now() });
+          ai33InflightByUser.delete(user.id);
           return result;
-        }).catch(err => { ai33Inflight = null; throw err; });
+        }).catch(err => { ai33InflightByUser.delete(user.id); throw err; }));
       }
 
-      const voices = await ai33Inflight;
+      const voices = await ai33InflightByUser.get(user.id);
       return { success: true, voices, count: voices.length };
     }
 

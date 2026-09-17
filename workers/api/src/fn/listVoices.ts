@@ -14,10 +14,12 @@ import type { FnHandler } from '../types';
 // ══════════════════════════════════════════════════════════════════
 
 // In-memory cache — survives across requests on the same Deno isolate
-let cachedVoices = null;
-let cacheTimestamp = 0;
+// Per user: voice libraries come from each user's own AI33 key and include their cloned
+// voices. A single shared cache meant a warm isolate could serve one user's voices —
+// clones included — to the next user for up to five minutes.
+const voiceCache = new Map(); // userId -> { voices, at }
+const inflightByUser = new Map(); // userId -> Promise
 const CACHE_TTL = 5 * 60 * 1000; // 5 min
-let inflight = null; // dedup concurrent requests
 
 async function fetchAllVoices(ctx) {
   const AI33_KEY = await ctx.keys.get('AI33_API_KEY');
@@ -132,29 +134,28 @@ const handler: FnHandler = async (body, ctx) => {
     }
 
     // Return cached result if fresh
-    if (cachedVoices && (Date.now() - cacheTimestamp) < CACHE_TTL) {
-      console.log(`✓ Serving ${cachedVoices.length} voices from cache`);
-      return { success: true, voices: cachedVoices, total: cachedVoices.length };
+    const cached = voiceCache.get(user.id);
+    if (cached && (Date.now() - cached.at) < CACHE_TTL) {
+      console.log(`✓ Serving ${cached.voices.length} voices from cache`);
+      return { success: true, voices: cached.voices, total: cached.voices.length };
     }
 
-    // Dedup concurrent in-flight requests
-    if (!inflight) {
-      inflight = fetchAllVoices(ctx).then(result => {
+    // Dedup concurrent in-flight requests — per user, since each fetch uses that user's
+    // own key. Sharing one promise handed user A's voices to user B.
+    if (!inflightByUser.has(user.id)) {
+      inflightByUser.set(user.id, fetchAllVoices(ctx).then(result => {
         // An empty list is a failure, not an answer: caching it meant the voice panel
         // stayed empty for five minutes after the provider recovered.
-        if (result.length > 0) {
-          cachedVoices = result;
-          cacheTimestamp = Date.now();
-        }
-        inflight = null;
+        if (result.length > 0) voiceCache.set(user.id, { voices: result, at: Date.now() });
+        inflightByUser.delete(user.id);
         return result;
       }).catch(err => {
-        inflight = null;
+        inflightByUser.delete(user.id);
         throw err;
-      });
+      }));
     }
 
-    const unique = await inflight;
+    const unique = await inflightByUser.get(user.id);
 
     return { success: true, voices: unique, total: unique.length };
   } catch (error) {
