@@ -4,6 +4,7 @@
 // Prompt strings are copied byte-for-byte. Prove it: tools/verify-prompts.mjs
 
 import { HttpError } from '../lib/http';
+import { enforceFacelessFigures, styleRequiresFacelessFigures } from '../lib/facelessGuard';
 import type { FnHandler } from '../types';
 
 // v3 — redeployed
@@ -505,11 +506,21 @@ const handler: FnHandler = async (body, ctx) => {
         }
       }
 
-      if (result.changed || shouldReset) {
+      // Repair path for projects whose prompts already contain human faces: masking is
+      // applied here too, so Fix Prompts can clean up scenes generated before the guard.
+      const needsMask = styleRequiresFacelessFigures(visualStyle);
+      const maskedPrompt = needsMask ? enforceFacelessFigures(result.prompt || scene.image_prompt || '') : null;
+      const maskChanged = needsMask && maskedPrompt && maskedPrompt !== (scene.image_prompt || '');
+
+      if (result.changed || shouldReset || maskChanged) {
         const update = {};
 
         if (result.changed && (fix_type === 'all' || fix_type === 'characters' || fix_type === 'cleanup')) {
           update.image_prompt = result.prompt;
+        }
+
+        if (maskChanged && !shouldReset) {
+          update.image_prompt = maskedPrompt;
         }
 
         if (shouldReset) {

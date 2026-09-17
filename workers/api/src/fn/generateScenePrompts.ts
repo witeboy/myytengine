@@ -7,6 +7,7 @@ import { HttpError } from '../lib/http';
 import { geminiFetch, openai } from '../lib/ai';
 import type { FnHandler } from '../types';
 import { resolveStyleId, styleMapForEngines } from '../lib/visualStyles';
+import { enforceFacelessFigures, styleRequiresFacelessFigures } from '../lib/facelessGuard';
 
 
 // ══════════════════════════════════════════════════════════════════
@@ -1982,6 +1983,13 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
           }
         } else {
           console.log(`🌙 Scene ${s.scene_number}: skipping OpenAI cleaner (sleep mode)`);
+        }
+
+        // Last word on the mannequin look. The style rules ask for it in capitals and the
+        // model still writes "a bearded gentleman" for a background figure, which renders
+        // one real face among the masks. Run after the cleaner so it cannot undo this.
+        if (styleRequiresFacelessFigures(visualStyle)) {
+          cleanedImagePrompt = enforceFacelessFigures(cleanedImagePrompt);
         }
 
         try {

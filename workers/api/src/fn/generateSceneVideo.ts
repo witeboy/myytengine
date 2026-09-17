@@ -36,13 +36,38 @@ const CAMERA_PHRASES = {
   static: "locked-off camera",
 };
 
+// Image-to-video models animate a still by inventing movement, and the classic failure is
+// a figure caught mid-stride: the model slides the body across the ground while the feet
+// stay planted the other way, so the subject appears to walk backwards. Saying what may
+// move — and that nobody travels across the frame — removes the guesswork.
+const MOTION_CONTRACT =
+  'Motion rules: the CAMERA moves as described; the people and objects stay where they are ' +
+  'and do not travel across the frame. Feet keep firm contact with the ground and never ' +
+  'slide, skate, glide or step backwards; if a figure is caught mid-stride, the stride ' +
+  'continues naturally in the exact direction the feet, knees and hips already point, and ' +
+  'the body turns with it. Anatomy stays consistent: no limbs detaching, stretching, ' +
+  'swapping or bending the wrong way, no extra fingers, no morphing heads or faces. ' +
+  'Nothing new enters the frame — no new people, objects or text. Movement is limited to ' +
+  'breathing, small weight shifts, hands and head turning slightly, hair and cloth ' +
+  'settling, flame, smoke, dust, rain, water and shifting light.';
+
+// Seedance takes a single prompt string; keep the description from crowding out the rules.
+const MAX_PROMPT_CHARS = 1800;
+
 function animationPrompt(raw) {
   const text = (raw || "").trim();
-  if (!text) return "Subtle cinematic motion, slow camera movement";
-  if (/^[a-z_]+$/.test(text)) {
-    return `${CAMERA_PHRASES[text] || text.replace(/_/g, " ")}, subtle natural motion in the scene`;
+  let described;
+  if (!text) {
+    described = "Subtle cinematic motion, slow camera movement";
+  } else if (/^[a-z_]+$/.test(text)) {
+    described = `${CAMERA_PHRASES[text] || text.replace(/_/g, " ")}, subtle natural motion in the scene`;
+  } else {
+    described = text;
   }
-  return text;
+
+  const room = MAX_PROMPT_CHARS - MOTION_CONTRACT.length - 2;
+  if (described.length > room) described = `${described.slice(0, Math.max(0, room - 1))}…`;
+  return `${described}. ${MOTION_CONTRACT}`;
 }
 
 const handler: FnHandler = async (body, ctx) => {
