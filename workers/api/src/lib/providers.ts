@@ -39,6 +39,7 @@ async function probe(
   url: string,
   init: RequestInit,
   label: string,
+  opts: { rejectNotFound?: boolean } = {},
 ): Promise<void> {
   let res: Response;
   try {
@@ -48,6 +49,11 @@ async function probe(
   }
   if (res.status === 401 || res.status === 403) {
     throw new Error(`${label} rejected this key (HTTP ${res.status})`);
+  }
+  // Probes that hit a real, always-present endpoint: a 404 means the endpoint moved, which
+  // would otherwise pass as "key works" while the feature quietly returns nothing.
+  if (opts.rejectNotFound && res.status === 404) {
+    throw new Error(`${label} endpoint not found (HTTP 404) — the API may have changed`);
   }
   if (res.status === 429) throw new Error(`${label} rate-limited — try again shortly`);
 }
@@ -117,6 +123,7 @@ export const PROVIDERS: ProviderDef[] = [
         'https://api.ai33.pro/v3/voices?provider=elevenlabs&page=1&page_size=1',
         { method: 'GET', headers: { 'xi-api-key': k } },
         'AI33.pro',
+        { rejectNotFound: true },
       ),
   },
 

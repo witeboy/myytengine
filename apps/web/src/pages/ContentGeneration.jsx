@@ -578,6 +578,65 @@ export default function ContentGeneration() {
   };
 
   // ═══════════════════════════════════════════════════════════════
+  // LONG VIRAL BREAKDOWN LOOP
+  // The page drives this one call at a time, so a closed tab or a refresh used to strand
+  // the project: the only way back in started at batch 0, which deletes every scene
+  // already created. `resume` keeps them and continues at the first missing scene.
+  // ═══════════════════════════════════════════════════════════════
+  const runLongViralBreakdown = async ({ resume = false, onProgress } = {}) => {
+    const notify = onProgress || (() => {});
+    let breakdownDone = false;
+    let nextBatch = resume ? null : 0; // null = let the server find where to pick up
+    let totalBatches = 1;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 40;
+
+    while (!breakdownDone && attempts < MAX_ATTEMPTS) {
+      attempts++;
+      try {
+        const payload = { project_id: projectId };
+        if (resume) payload.resume = true;
+        if (nextBatch !== null) payload.start_batch = nextBatch;
+
+        const bdResult = await api.functions.invoke('longViralSceneBreakdown', payload);
+        const bdData = bdResult?.data || bdResult;
+        if (bdData?.error) throw new Error(bdData.error);
+
+        breakdownDone = bdData.done === true;
+        nextBatch = bdData.next_batch ?? (nextBatch === null ? 0 : nextBatch);
+        totalBatches = bdData.total_batches || totalBatches;
+
+        const freshScenes = await api.entities.Scenes.filter({ project_id: projectId });
+        queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
+        setTotalExpectedScenes(freshScenes.length);
+        notify(
+          breakdownDone
+            ? `Created ${freshScenes.length} scenes — now generating image prompts...`
+            : `Breaking down... batch ${nextBatch}/${totalBatches} — ${freshScenes.length} scenes so far...`
+        );
+      } catch (err) {
+        const status = err?.response?.status || err?.status;
+        if (status === 502 || status === 504) {
+          notify('Batch taking long — retrying in 8s...');
+          await new Promise(r => setTimeout(r, 8000));
+          continue;
+        }
+        throw err;
+      }
+      if (!breakdownDone) await new Promise(r => setTimeout(r, 1500));
+    }
+
+    const finalScenes = await api.entities.Scenes.filter({ project_id: projectId });
+    if (finalScenes.length === 0) {
+      throw new Error('Long Viral scene breakdown failed. Please try again.');
+    }
+    if (!breakdownDone) {
+      throw new Error(`Breakdown stopped after ${attempts} batches with ${finalScenes.length} scenes. Use "Resume breakdown" to continue.`);
+    }
+    return finalScenes;
+  };
+
+  // ═══════════════════════════════════════════════════════════════
   // MANUAL BUTTON: Convert Director Notes → Prompts
   // Visible whenever there are breakdown_ready scenes
   // ═══════════════════════════════════════════════════════════════
@@ -741,8 +800,12 @@ export default function ContentGeneration() {
     setImportPhase('breakdown');
     try {
       setImportProgress('Resuming breakdown. Finished scenes are kept...');
-      // Batch 1 reuses the saved story analysis; finished phases are skipped server-side.
-      await runStandardBreakdown(1);
+      if (isLongViralModeFn(resolveProjectMode(project, null).mode)) {
+        await runLongViralBreakdown({ resume: true, onProgress: setImportProgress });
+      } else {
+        // Batch 1 reuses the saved story analysis; finished phases are skipped server-side.
+        await runStandardBreakdown(1);
+      }
       setImportPhase('prompts');
       await runPromptGeneration({ onProgress: setImportProgress });
     } catch (err) {
@@ -908,50 +971,7 @@ export default function ContentGeneration() {
       } else if (isLongViralProject) {
         // ── LONG VIRAL: sentence-driven scene breakdown — batched/resumable (3 sub-batches per call) ──
         setImportProgress('Breaking script into sentence-driven scenes...');
-        let breakdownDone = false;
-        let nextBatch = 0;
-        let totalBatches = 1;
-        let attempts = 0;
-        const MAX_ATTEMPTS = 30;
-
-        while (!breakdownDone && attempts < MAX_ATTEMPTS) {
-          attempts++;
-          try {
-            const bdResult = await api.functions.invoke('longViralSceneBreakdown', {
-              project_id: projectId,
-              start_batch: nextBatch,
-            });
-            const bdData = bdResult?.data || bdResult;
-            if (bdData?.error) throw new Error(bdData.error);
-
-            breakdownDone = bdData.done === true;
-            nextBatch = bdData.next_batch ?? nextBatch;
-            totalBatches = bdData.total_batches || totalBatches;
-
-            const freshScenes = await api.entities.Scenes.filter({ project_id: projectId });
-            queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
-            setTotalExpectedScenes(freshScenes.length);
-            setImportProgress(
-              breakdownDone
-                ? `Created ${freshScenes.length} scenes — now generating image prompts...`
-                : `Breaking down... batch ${nextBatch}/${totalBatches} — ${freshScenes.length} scenes so far...`
-            );
-          } catch (err) {
-            const status = err?.response?.status || err?.status;
-            if (status === 502 || status === 504) {
-              setImportProgress(`Batch taking long — retrying in 8s...`);
-              await new Promise(r => setTimeout(r, 8000));
-              continue;
-            }
-            throw err;
-          }
-          if (!breakdownDone) await new Promise(r => setTimeout(r, 1500));
-        }
-
-        const finalScenes = await api.entities.Scenes.filter({ project_id: projectId });
-        if (finalScenes.length === 0) {
-          throw new Error('Long Viral scene breakdown failed. Please try again.');
-        }
+        await runLongViralBreakdown({ onProgress: setImportProgress });
 
         // Long viral breakdown saves DIRECTOR_NOTES: scenes — must run prompt generation
         setImportPhase('prompts');
@@ -1559,7 +1579,17 @@ export default function ContentGeneration() {
   // runs corrupted the breakdown; far fewer scenes than planned means it stopped part-way.
   const breakdownIssue = (() => {
     if (!project || scenes.length === 0) return null;
-    if (isShortsProject || isSleepModeFn(resolvedUiMode) || isExplainerModeFn(resolvedUiMode) || isLongViralModeFn(resolvedUiMode)) return null;
+    // Long Viral is driven by the page across many calls, so a closed tab leaves it
+    // part-way through with no sign of it. The project is only marked complete at the end.
+    if (isLongViralModeFn(resolvedUiMode)) {
+      if (project.status === 'breakdown_complete' || project.current_step > 5) return null;
+      return {
+        kind: 'incomplete',
+        title: `Scene breakdown stopped part-way: ${scenes.length} scenes so far`,
+        detail: 'The rest of the script has no scenes yet. Resume to create them; finished scenes are kept.',
+      };
+    }
+    if (isShortsProject || isSleepModeFn(resolvedUiMode) || isExplainerModeFn(resolvedUiMode)) return null;
     const counts = {};
     for (const s of scenes) counts[s.scene_number] = (counts[s.scene_number] || 0) + 1;
     const duplicated = Object.values(counts).filter(c => c > 1).length;

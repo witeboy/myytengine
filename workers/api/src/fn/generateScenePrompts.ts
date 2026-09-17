@@ -681,6 +681,11 @@ const handler: FnHandler = async (body, ctx) => {
 
 
     if (pendingScenes.length === 0) {
+      // A project with no scenes at all used to get the same "all done" answer as a
+      // finished one, so a missing breakdown looked like a silent success.
+      if (allScenes.length === 0) {
+        throw new HttpError(400, 'This project has no scenes yet — run the scene breakdown first.');
+      }
       return {
         success: true, done: true,
         message: 'All scenes already have prompts.',

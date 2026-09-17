@@ -145,7 +145,7 @@ const handler: FnHandler = async (body, ctx) => {
   try {
     const user = ctx.user;
 
-    const { project_id, start_batch = 0 } = body;
+    const { project_id, start_batch = 0, resume = false } = body;
 
     const projects = await ctx.db.Projects.filter({ id: project_id });
     const project = projects[0];
@@ -179,17 +179,48 @@ const handler: FnHandler = async (body, ctx) => {
     const beatChunks = chunkBeats(allBeats);
     const totalChunks = beatChunks.length;
 
-    // On the very first call, clear any stale scenes from a previous run.
-    if (start_batch === 0) {
+    // The page drives this breakdown one call at a time, so a closed tab used to strand a
+    // project half done: the only way back in was start_batch 0, which deletes everything.
+    // Resuming keeps what exists and picks up at the first chunk with scenes missing.
+    const existingNumbers = new Set(
+      (await ctx.db.Scenes.filter({ project_id })).map(s => s.scene_number)
+    );
+
+    if (start_batch === 0 && !resume) {
       const stale = await ctx.db.Scenes.filter({ project_id });
       if (stale.length > 0) {
         await Promise.all(stale.map(s => ctx.db.Scenes.delete(s.id).catch(() => {})));
         console.log(`🗑️ Cleared ${stale.length} stale scenes before fresh breakdown`);
       }
+      existingNumbers.clear();
+    }
+
+    // First scene number of each chunk, so a chunk can be tested against what exists.
+    const chunkFirstNumbers = [];
+    let runningNumber = 1;
+    for (const chunk of beatChunks) {
+      chunkFirstNumbers.push(runningNumber);
+      runningNumber += chunk.length;
+    }
+    const chunkDone = (bi) => {
+      const first = chunkFirstNumbers[bi];
+      for (let n = first; n < first + beatChunks[bi].length; n++) {
+        if (existingNumbers.has(n)) return true;
+      }
+      return false;
+    };
+
+    let firstBatch = start_batch;
+    if (resume && !start_batch) {
+      firstBatch = totalChunks;
+      for (let bi = 0; bi < totalChunks; bi++) {
+        if (!chunkDone(bi)) { firstBatch = bi; break; }
+      }
+      console.log(`⏩ Resuming at sub-batch ${firstBatch + 1}/${totalChunks} — ${existingNumbers.size} scenes already saved`);
     }
 
     // ── Step 4: Process this call's slice of sub-batches through Gemini ───────
-    const endBatch = Math.min(start_batch + CHUNKS_PER_CALL, totalChunks);
+    const endBatch = Math.min(firstBatch + CHUNKS_PER_CALL, totalChunks);
     const allAiScenes = [];
     // Scene numbers are deterministic: sum of beat counts in all prior chunks + 1.
     let globalSceneNumber = beatChunks.slice(0, start_batch).reduce((sum, c) => sum + c.length, 0) + 1;

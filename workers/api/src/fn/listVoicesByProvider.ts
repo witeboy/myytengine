@@ -76,6 +76,67 @@ let ai33CacheTime = 0;
 const CACHE_TTL = 5 * 60 * 1000;
 let ai33Inflight = null;
 
+// The v2/v1m endpoints listVoices.ts has always used. They answer when v3 does not, so an
+// AI33 change to v3 empties the voice panel instead of breaking it.
+async function fetchAI33VoicesLegacy(ctx, headers) {
+  const voices = [];
+  const [elevenRes, mmRes, cloneRes] = await Promise.all([
+    fetch('https://api.ai33.pro/v2/voices', { headers }).catch(() => null),
+    fetch('https://api.ai33.pro/v1m/voice/list', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ page: 1, page_size: 100, tag_list: [] }),
+    }).catch(() => null),
+    fetch('https://api.ai33.pro/v1m/voice/clone', { headers }).catch(() => null),
+  ]);
+
+  if (elevenRes?.ok) {
+    const data = await elevenRes.json().catch(() => ({}));
+    for (const v of (data.voices || [])) {
+      voices.push({
+        voice_id: v.voice_id,
+        name: v.name || v.voice_id,
+        description: (v.description || '').substring(0, 100),
+        preview_url: v.preview_url || null,
+        labels: {
+          accent: v.labels?.accent || '',
+          gender: (v.labels?.gender || '').toLowerCase(),
+          age: (v.labels?.age || '').toLowerCase().replace(/\s+/g, '_'),
+          use_case: v.labels?.use_case || '',
+        },
+        category: 'elevenlabs',
+      });
+    }
+  }
+  if (mmRes?.ok) {
+    const data = await mmRes.json().catch(() => ({}));
+    for (const v of (data.data?.voice_list || [])) {
+      voices.push({
+        voice_id: v.voice_id,
+        name: v.voice_name || v.voice_id,
+        description: (v.tag_list || []).join(', '),
+        preview_url: v.sample_audio || null,
+        labels: { accent: '', gender: '', age: '', use_case: 'narration' },
+        category: 'minimax',
+      });
+    }
+  }
+  if (cloneRes?.ok) {
+    const data = await cloneRes.json().catch(() => ({}));
+    for (const v of (data.data || [])) {
+      voices.push({
+        voice_id: v.voice_id,
+        name: v.voice_name || v.voice_id,
+        description: 'Cloned voice',
+        preview_url: v.sample_audio || null,
+        labels: { accent: '', gender: '', age: '', use_case: 'cloned' },
+        category: 'cloned',
+      });
+    }
+  }
+  return voices;
+}
+
 async function fetchAI33Voices(ctx) {
   const AI33_KEY = await ctx.keys.get('AI33_API_KEY');
   const headers = { 'xi-api-key': AI33_KEY };
@@ -85,16 +146,42 @@ async function fetchAI33Voices(ctx) {
     clone: 'cloned',
   };
 
+  // Why every call is answered for: when all three failed this returned an empty list with
+  // success:true, so the voice panel just sat empty with nothing to explain it.
+  const failures = [];
   const results = await Promise.all(
     Object.keys(providerCategories).map(async provider => {
       const url = `https://api.ai33.pro/v3/voices?provider=${provider}&page=1&page_size=100`;
-      const response = await fetch(url, { headers });
+      const response = await fetch(url, { headers }).catch(err => {
+        failures.push(`${provider}: ${err?.message || 'request failed'}`);
+        return null;
+      });
+      if (!response) return [];
       if (!response.ok) {
-        console.warn(`AI33 v3 ${provider} voices returned ${response.status}`);
+        const detail = (await response.text().catch(() => '')).slice(0, 120);
+        console.warn(`AI33 v3 ${provider} voices returned ${response.status} ${detail}`);
+        failures.push(`${provider}: HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
         return [];
       }
       const payload = await response.json();
-      return (payload.data || []).map(voice => ({
+      // AI33 has moved this list around (data / voices / items / a bare array). Reading only
+      // `data` returned an empty panel with no error when the shape changed.
+      const list = Array.isArray(payload) ? payload
+        : Array.isArray(payload?.data) ? payload.data
+        : Array.isArray(payload?.voices) ? payload.voices
+        : Array.isArray(payload?.data?.voices) ? payload.data.voices
+        : Array.isArray(payload?.data?.list) ? payload.data.list
+        : Array.isArray(payload?.items) ? payload.items
+        : Array.isArray(payload?.results) ? payload.results
+        : null;
+      if (!list) {
+        const shape = payload && typeof payload === 'object' ? Object.keys(payload).join(',') : typeof payload;
+        console.warn(`AI33 v3 ${provider}: 200 but no voice array. Top-level keys: ${shape}`);
+        failures.push(`${provider}: answered with no voice list (keys: ${shape})`);
+        return [];
+      }
+      if (list.length === 0) console.warn(`AI33 v3 ${provider}: 200 with an empty list`);
+      return list.map(voice => ({
         voice_id: voice.voice_id,
         name: voice.name || voice.voice_id,
         description: (voice.description || '').substring(0, 100),
@@ -111,11 +198,19 @@ async function fetchAI33Voices(ctx) {
   );
 
   const seen = new Set();
-  return results.flat().filter(voice => {
+  const voices = results.flat().filter(voice => {
     if (seen.has(voice.voice_id)) return false;
     seen.add(voice.voice_id);
     return true;
   });
+  if (voices.length > 0) return voices;
+
+  const legacy = await fetchAI33VoicesLegacy(ctx, headers);
+  if (legacy.length > 0) {
+    console.log(`AI33 v3 gave no voices (${failures.join('; ') || 'empty'}) — served ${legacy.length} from v2/v1m`);
+    return legacy;
+  }
+  throw new HttpError(502, `AI33 returned no voices. ${failures.join('; ') || 'The voice library was empty.'}`);
 }
 
 const handler: FnHandler = async (body, ctx) => {
