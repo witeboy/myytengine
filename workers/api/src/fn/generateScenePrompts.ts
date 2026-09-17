@@ -6,7 +6,7 @@
 import { HttpError } from '../lib/http';
 import { geminiFetch, openai } from '../lib/ai';
 import type { FnHandler } from '../types';
-import { resolveStyleId, styleMapForEngines } from '../lib/visualStyles';
+import { resolveStyleId, styleDirective, styleMapForEngines } from '../lib/visualStyles';
 import { enforceFacelessFigures, styleRequiresFacelessFigures } from '../lib/facelessGuard';
 
 
@@ -678,7 +678,9 @@ const handler: FnHandler = async (body, ctx) => {
       };
       console.log(`🌙 Sleep/ambient mode: using PURE dark oil painting style (replaced "${rawStyle}")`);
     } else {
-      styleConfig = { ...styleMap[normalizeStyleKey(rawStyle)] };
+      // Explainer and B-Roll Only have no look of their own, so this must never come back
+      // empty: the prompt builder reads styleConfig.positive unconditionally.
+      styleConfig = { ...styleDirective(rawStyle) };
     }
     console.log(`🎨 Style: raw="${rawStyle}" → resolved="${visualStyle}"${useSleepStyle ? ' [SLEEP DARK MODE]' : ''}`);
 

@@ -7,6 +7,7 @@ import {
   getStyle,
   isBrollOnlyStyle,
   resolveStyleId,
+  styleDirective,
   styleMapForEngines,
 } from '../src/lib/visualStyles';
 
@@ -39,6 +40,25 @@ describe('the style catalogue', () => {
       expect(map[style.id]?.negative).toBe(style.avoid);
     }
     expect(map.broll_only).toBeUndefined();
+  });
+});
+
+describe('styleDirective', () => {
+  it('always returns prompt text, for every style and for junk', () => {
+    // The engines read .positive unconditionally: an empty directive is a 500 on the
+    // prompt run. Sleep, Explainer and B-Roll Only carry no look of their own.
+    for (const style of STYLES) {
+      const directive = styleDirective(style.id);
+      expect(directive.positive, `${style.id} produced no prompt text`).toBeTruthy();
+    }
+    expect(styleDirective('explainer_diagram').positive).toBeTruthy();
+    expect(styleDirective('broll_only').positive).toBeTruthy();
+    expect(styleDirective('nonsense').positive).toBeTruthy();
+    expect(styleDirective(null).positive).toBeTruthy();
+  });
+
+  it('keeps a real look rather than substituting the default', () => {
+    expect(styleDirective('faceless_mannequin').positive).toBe(getStyle('faceless_mannequin').positive);
   });
 });
 

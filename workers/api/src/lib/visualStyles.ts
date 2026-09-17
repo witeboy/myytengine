@@ -63,6 +63,18 @@ export function isBrollOnlyStyle(raw: unknown): boolean {
  * The shape the prompt engines expect: { [id]: { positive, negative } }. `negative` is kept
  * as the name the engines already use for the avoid list.
  */
+/**
+ * The prompt directive for any style, guaranteed usable. Styles a project mode sets on its
+ * own (sleep, explainer) and B-Roll Only carry no prompt text, and the engines read
+ * `.positive` unconditionally — so they fall back to the default look rather than throwing.
+ */
+export function styleDirective(raw: unknown): { positive: string; negative: string } {
+  const style = getStyle(raw);
+  if (style.positive) return { positive: style.positive, negative: style.avoid || '' };
+  const fallback = BY_ID.get(DEFAULT_STYLE_ID) as VisualStyle;
+  return { positive: fallback.positive || '', negative: fallback.avoid || '' };
+}
+
 export function styleMapForEngines(): Record<string, { positive: string; negative: string }> {
   const map: Record<string, { positive: string; negative: string }> = {};
   for (const style of STYLES) {
