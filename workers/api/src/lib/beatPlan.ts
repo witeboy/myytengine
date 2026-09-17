@@ -118,7 +118,14 @@ function groupSentences(sentences: string[], count: number): string[][] {
  * a long, frantic beat gets several, a short quiet one gets a single held image. A beat
  * whose shots outnumber its sentences covers the line from more than one camera angle.
  */
-export function beatsToSceneBeats(beats: Beat[], sentences: string[], maxShotsPerBeat = 8): SceneBeat[] {
+/**
+ * No single scene may hold more narration than this. A long beat with few shots left one
+ * image on screen for nearly half a minute; at ~150 words a minute this caps a scene at
+ * about thirteen seconds.
+ */
+const MAX_WORDS_PER_SCENE = 32;
+
+export function beatsToSceneBeats(beats: Beat[], sentences: string[], maxShotsPerBeat = 12): SceneBeat[] {
   const out: SceneBeat[] = [];
 
   for (const beat of beats) {
@@ -133,7 +140,26 @@ export function beatsToSceneBeats(beats: Beat[], sentences: string[], maxShotsPe
     if (shots <= own.length) {
       for (const group of groupSentences(own, shots)) {
         const text = group.join(' ');
-        out.push({ narration_text: text, word_count: wordsIn(text), angle_index: 0, total_angles: 1, is_multi_angle: false, ...meta });
+        const groupWords = wordsIn(text);
+
+        // A group that still runs long is split again — by sentence where it can be, and
+        // otherwise covered from several angles, so no image is held too long.
+        if (groupWords > MAX_WORDS_PER_SCENE) {
+          const pieces = Math.ceil(groupWords / MAX_WORDS_PER_SCENE);
+          if (group.length > 1) {
+            for (const sub of groupSentences(group, Math.min(pieces, group.length))) {
+              const subText = sub.join(' ');
+              out.push({ narration_text: subText, word_count: wordsIn(subText), angle_index: 0, total_angles: 1, is_multi_angle: false, ...meta });
+            }
+          } else {
+            for (let a = 0; a < pieces; a++) {
+              out.push({ narration_text: text, word_count: groupWords, angle_index: a, total_angles: pieces, is_multi_angle: pieces > 1, ...meta });
+            }
+          }
+          continue;
+        }
+
+        out.push({ narration_text: text, word_count: groupWords, angle_index: 0, total_angles: 1, is_multi_angle: false, ...meta });
       }
       continue;
     }

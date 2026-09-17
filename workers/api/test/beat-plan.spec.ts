@@ -120,6 +120,14 @@ describe('beatsToSceneBeats', () => {
 
   it('never runs away with one beat', () => {
     const huge = ['word '.repeat(400).trim() + '.'];
-    expect(beatsToSceneBeats(normalizeBeats([{ start_sentence: 1, pacing_and_momentum: 'fast' }], 1), huge).length).toBeLessThanOrEqual(8);
+    expect(beatsToSceneBeats(normalizeBeats([{ start_sentence: 1, pacing_and_momentum: 'fast' }], 1), huge).length).toBeLessThanOrEqual(12);
+  });
+
+  it('never holds one image for half a minute', () => {
+    // A long beat with few shots used to produce 67-word scenes — about 27 seconds on a
+    // single still. No scene may carry more than ~32 words (~13s) of narration.
+    const longBeat = Array.from({ length: 30 }, (_, i) => `This is sentence number ${i} of a long and unbroken stretch of narration.`);
+    const scenes = beatsToSceneBeats(normalizeBeats([{ start_sentence: 1, pacing_and_momentum: 'slow and heavy' }], longBeat.length), longBeat);
+    expect(Math.max(...scenes.map(s => s.word_count))).toBeLessThanOrEqual(32);
   });
 });
