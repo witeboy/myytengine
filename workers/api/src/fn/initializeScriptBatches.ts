@@ -473,7 +473,7 @@ const handler: FnHandler = async (body, ctx) => {
 
   } catch (error) {
     console.error('Error initializing batches:', error);
-    throw new HttpError(500, error.message);
+    throw error instanceof HttpError ? error : new HttpError(500, error.message);
   }
 };
 

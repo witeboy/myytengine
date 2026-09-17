@@ -1221,7 +1221,9 @@ export default function ContentGeneration() {
           preferred_provider: freshProject?.image_provider || 'auto'
         });
         const data = response.data || response;
-        submitCount += data.submitted || batch.length;
+        // `|| batch.length` counted a batch where nothing submitted as a full success,
+        // because zero is falsy.
+        submitCount += typeof data.submitted === 'number' ? data.submitted : batch.length;
       } catch (err) {
         const status = err?.response?.status || err?.status;
         if (status === 504) {
@@ -1318,7 +1320,9 @@ export default function ContentGeneration() {
 
     const ready = scenes.filter(s =>
       s.image_url && s.image_url.startsWith('http') &&
-      (s.status === 'image_generated' || s.status === 'prompts_ready') &&
+      // A scene whose animation failed once was excluded from here forever, so the only
+      // way to retry it was one card at a time.
+      (s.status === 'image_generated' || s.status === 'prompts_ready' || s.status === 'video_failed' || s.status === 'failed') &&
       (!s.video_url || s.video_url.startsWith('seedance_task:') || s.video_url.startsWith('grok_vid_task:') || s.video_url.startsWith('veo_task:'))
     );
 

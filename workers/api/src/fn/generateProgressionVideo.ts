@@ -232,7 +232,7 @@ const handler: FnHandler = async (body, ctx) => {
     if (start_scene_id) {
       try { await ctx.db.Scenes.update(start_scene_id, { status: "failed" }); } catch (_) {}
     }
-    throw new HttpError(500, error.message);
+    throw error instanceof HttpError ? error : new HttpError(500, error.message);
   }
 };
 

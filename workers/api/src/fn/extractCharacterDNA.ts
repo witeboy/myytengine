@@ -355,7 +355,7 @@ ${fullScript}
 
   } catch (error) {
     console.error('❌ extractCharacterDNA error:', error.message);
-    throw new HttpError(500, error.message);
+    throw error instanceof HttpError ? error : new HttpError(500, error.message);
   }
 };
 

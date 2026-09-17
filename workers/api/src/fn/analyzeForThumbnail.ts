@@ -143,7 +143,7 @@ Return ONLY valid JSON:
 
   } catch (error) {
     console.error('analyzeForThumbnail error:', error.message);
-    throw new HttpError(500, error.message);
+    throw error instanceof HttpError ? error : new HttpError(500, error.message);
   }
 };
 

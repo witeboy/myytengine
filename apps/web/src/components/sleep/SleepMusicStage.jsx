@@ -9,6 +9,7 @@ export default function SleepMusicStage({ projectId, project, onRefetch }) {
   const [generating, setGenerating] = useState(false);
   const [tracks, setTracks] = useState([]);
   const [loaded, setLoaded] = useState(false);
+  const [musicError, setMusicError] = useState('');
 
   // Load existing music tracks
   useEffect(() => {
@@ -27,22 +28,47 @@ export default function SleepMusicStage({ projectId, project, onRefetch }) {
 
   const handleGenerateMusic = async () => {
     setGenerating(true);
+    setMusicError('');
     try {
       const durationMin = project?.video_duration_minutes || 15;
       const topicName = project?.name || 'peaceful sleep';
 
-      await api.functions.invoke('generateMusic', {
+      const res = await api.functions.invoke('generateMusic', {
         project_id: projectId,
         prompt: `432 Hz deep sleep ambient music for a ${durationMin}-minute ${project?.project_mode === 'sleep_meditation' ? 'guided meditation' : 'sleep story'} about "${topicName}". Ultra-calming, no percussion, no vocals. Gentle pads, soft atmospheric textures, very slow harmonic movement. Binaural-friendly, designed to induce deep relaxation and sleep. Think Brian Eno ambient meets 432 Hz healing frequency music. Extremely minimal, spacious, almost silent at times.`,
         mood: 'ambient_sleep',
         genre: '432hz_ambient'
       });
 
+      // Suno renders for a few minutes and nothing here used to wait for it: the task id
+      // was dropped, no track row was ever written, and the finished music was
+      // unreachable. Follow the task through to the audio.
+      const data = res?.data || res;
+      const taskId = data?.task_id;
+      const trackId = data?.track_id;
+
+      if (taskId && trackId) {
+        for (let attempt = 0; attempt < 60; attempt++) {
+          await new Promise(r => setTimeout(r, 15000));
+          let status = '';
+          try {
+            const statusRes = await api.functions.invoke('checkMusicStatus', { task_id: taskId, track_id: trackId });
+            status = String((statusRes.data || statusRes)?.status || '').toLowerCase();
+          } catch (err) {
+            console.warn('Sleep music status check failed:', err.message);
+          }
+          const refreshing = await api.entities.MusicTracks.filter({ project_id: projectId });
+          setTracks(refreshing || []);
+          if (status === 'completed' || status === 'failed') break;
+        }
+      }
+
       const refreshed = await api.entities.MusicTracks.filter({ project_id: projectId });
       setTracks(refreshed || []);
       await onRefetch();
     } catch (err) {
       console.error('Music generation failed:', err);
+      setMusicError(err?.response?.data?.error || err.message || 'Music generation failed');
     } finally {
       setGenerating(false);
     }
@@ -102,8 +128,11 @@ export default function SleepMusicStage({ projectId, project, onRefetch }) {
           </Button>
         )}
 
+        {musicError && <p className="text-[11px] text-red-300 mt-2">{musicError}</p>}
+
         <p className="text-[10px] text-white/30 mt-3">
           432Hz tuning promotes deep relaxation. Music will be ultra-minimal ambient pads, no beats or vocals.
+          {generating && ' Rendering takes a few minutes — keep this page open.'}
         </p>
       </CardContent>
     </Card>

@@ -140,8 +140,12 @@ const handler: FnHandler = async (body, ctx) => {
     // Dedup concurrent in-flight requests
     if (!inflight) {
       inflight = fetchAllVoices(ctx).then(result => {
-        cachedVoices = result;
-        cacheTimestamp = Date.now();
+        // An empty list is a failure, not an answer: caching it meant the voice panel
+        // stayed empty for five minutes after the provider recovered.
+        if (result.length > 0) {
+          cachedVoices = result;
+          cacheTimestamp = Date.now();
+        }
         inflight = null;
         return result;
       }).catch(err => {
@@ -154,7 +158,7 @@ const handler: FnHandler = async (body, ctx) => {
 
     return { success: true, voices: unique, total: unique.length };
   } catch (error) {
-    throw new HttpError(500, error.message);
+    throw error instanceof HttpError ? error : new HttpError(500, error.message);
   }
 };
 

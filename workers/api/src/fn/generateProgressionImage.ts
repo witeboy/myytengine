@@ -206,6 +206,13 @@ const handler: FnHandler = async (body, ctx) => {
       }
     }
 
+    // KIE can answer "success" with no URL in it. Writing that through marked the scene
+    // generated with no image, and nothing ever retried it.
+    if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.startsWith('http')) {
+      await ctx.db.Scenes.update(scene_id, { status: 'image_failed' });
+      throw new HttpError(502, 'The image provider returned no image for this scene. Try again.');
+    }
+
     // Save to scene
     await ctx.db.Scenes.update(scene_id, {
       image_url: imageUrl,
@@ -222,7 +229,7 @@ const handler: FnHandler = async (body, ctx) => {
 
   } catch (error) {
     console.error("generateProgressionImage error:", error.message);
-    throw new HttpError(500, error.message);
+    throw error instanceof HttpError ? error : new HttpError(500, error.message);
   }
 };
 

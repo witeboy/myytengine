@@ -8,7 +8,10 @@ import { api } from '@/api/client';
 // ══════════════════════════════════════════════════════════════════
 
 const POLL_INTERVAL = 3000;  // 3s between polls
-const POLL_TIMEOUT = 180000; // 3 min max
+// Transcribing a 45-minute sleep story routinely runs past three minutes. The old cap
+// abandoned jobs that were progressing normally, and the next attempt paid to transcribe
+// the same audio again.
+const POLL_TIMEOUT = 900000; // 15 min max
 
 /**
  * Transcribe a voiceover URL using AssemblyAI via submit/poll backend functions.
@@ -37,7 +40,7 @@ export async function transcribeVoiceover(voiceoverUrl, onProgress) {
 
   while (true) {
     if (Date.now() - startTime > POLL_TIMEOUT) {
-      throw new Error('Transcription timed out after 3 minutes');
+      throw new Error('Transcription timed out after 15 minutes');
     }
 
     await new Promise(r => setTimeout(r, POLL_INTERVAL));

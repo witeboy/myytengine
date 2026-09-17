@@ -19,6 +19,8 @@ export default function MusicPanel({ project }) {
   const [editingPromptId, setEditingPromptId] = useState(null);
   const [editedPrompt, setEditedPrompt] = useState('');
   const pollRef = useRef(null);
+  const taskPollRef = useRef(null);
+  const resumedRef = useRef(null);
 
   const { data: tracks = [], refetch } = useQuery({
     queryKey: ['music', project?.id],
@@ -39,8 +41,71 @@ export default function MusicPanel({ project }) {
       pollRef.current = null;
       setGeneratingTrackId(null);
     }
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    return () => {
+      // Clearing without nulling left a stale id behind, and the guard above then
+      // refused to restart the timer: progress silently stopped updating.
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
   }, [tracks]);
+
+  // A track whose task id was saved can be picked up again after a reload. Without this
+  // the row sat on "Generating…" forever, with no way to finish or retry it.
+  useEffect(() => {
+    const stuck = tracks.find(t => t.status === 'generating' && t.generation_task_id && !t.audio_url);
+    if (!stuck || resumedRef.current === stuck.id) return;
+    resumedRef.current = stuck.id;
+    pollMusicTask(stuck.id, stuck.generation_task_id);
+  }, [tracks]);
+
+  // One poller for the running Suno task, with a ceiling and a cleanup. The previous
+  // interval was a local that nothing could clear: it survived unmount and ran forever
+  // when a task never reached a terminal status.
+  const pollMusicTask = (trackId, taskId) => {
+    if (taskPollRef.current) clearInterval(taskPollRef.current);
+    setGeneratingTrackId(trackId);
+    let failCount = 0;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 60; // 15 minutes at 15s
+
+    const stop = () => {
+      if (taskPollRef.current) clearInterval(taskPollRef.current);
+      taskPollRef.current = null;
+      setGeneratingTrackId(null);
+      refetch();
+    };
+
+    const giveUp = async (title, description) => {
+      stop();
+      try { await api.entities.MusicTracks.update(trackId, { status: 'failed' }); } catch (_) {}
+      refetch();
+      toast({ title, description, variant: 'destructive', duration: 6000 });
+    };
+
+    taskPollRef.current = setInterval(async () => {
+      attempts++;
+      if (attempts > MAX_ATTEMPTS) {
+        await giveUp('Music is taking too long', 'The track was left unfinished. You can generate it again.');
+        return;
+      }
+      try {
+        const statusRes = await api.functions.invoke('checkMusicStatus', { task_id: taskId, track_id: trackId });
+        const st = String(statusRes.data?.status || '').toLowerCase();
+        failCount = 0;
+        if (st === 'completed' || st === 'failed') stop();
+      } catch (err) {
+        failCount++;
+        console.warn('Music status check failed:', err.message);
+        if (failCount >= 5) {
+          await giveUp('Music Status Check Failed', 'Could not verify music generation status after several attempts.');
+        }
+      }
+    }, 15000);
+  };
+
+  useEffect(() => () => { if (taskPollRef.current) clearInterval(taskPollRef.current); }, []);
 
   const isSleepProject = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
 
@@ -110,7 +175,7 @@ Return JSON:
     } catch (err) {
       console.error('generateMusic failed:', err);
       const errData = err?.response?.data;
-      const provider = errData?.provider || 'KIE (Suno)';
+      const provider = errData?.provider || 'AI33 (Suno)';
       const msg = errData?.error || err.message || 'Music generation failed';
       const isCredits = err?.response?.status === 402 || /credit|balance|top.?up|insufficient/i.test(msg);
       await api.entities.MusicTracks.update(track.id, { status: 'failed' });
@@ -136,32 +201,7 @@ Return JSON:
     }
 
     if (taskId) {
-      let failCount = 0;
-      const poll = setInterval(async () => {
-        try {
-          const statusRes = await api.functions.invoke('checkMusicStatus', {
-            task_id: taskId,
-            track_id: track.id,
-          });
-          const st = statusRes.data?.status;
-          failCount = 0;
-          if (st === 'COMPLETED' || st === 'completed' || st === 'FAILED' || st === 'failed') {
-            clearInterval(poll);
-            setGeneratingTrackId(null);
-            refetch();
-          }
-        } catch (err) {
-          failCount++;
-          console.warn('Music status check failed:', err.message);
-          if (failCount >= 5) {
-            clearInterval(poll);
-            setGeneratingTrackId(null);
-            await api.entities.MusicTracks.update(track.id, { status: 'failed' });
-            refetch();
-            toast({ title: 'Music Status Check Failed', description: 'Could not verify music generation status after multiple attempts.', variant: 'destructive', duration: 3000 });
-          }
-        }
-      }, 15000);
+      pollMusicTask(track.id, taskId);
     } else {
       setGeneratingTrackId(null);
       refetch();

@@ -166,7 +166,7 @@ const handler: FnHandler = async (body, ctx) => {
     throw new HttpError(400, 'Provide "prompt" or "prompts" array');
   } catch (error) {
     console.error("cleanScenePrompt error:", error.message);
-    throw new HttpError(500, error.message);
+    throw error instanceof HttpError ? error : new HttpError(500, error.message);
   }
 };
 

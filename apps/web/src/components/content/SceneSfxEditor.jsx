@@ -10,11 +10,14 @@ export default function SceneSfxEditor({ scene, onUpdate }) {
   const [volume, setVolume] = useState(scene.sfx_volume ?? 0.5);
   const [generating, setGenerating] = useState(false);
   const [generatingAudio, setGeneratingAudio] = useState(false);
+  const [sfxError, setSfxError] = useState('');
   const [playing, setPlaying] = useState(false);
   const [audioRef] = useState({ current: null });
 
   const handleSuggest = async () => {
     setGenerating(true);
+    setSfxError('');
+    try {
     const result = await api.integrations.Core.InvokeLLM({
       prompt: `You are an expert foley artist. Given this scene narration, suggest the single BEST minimal sound effect that would make this scene feel real and immersive.
 
@@ -41,25 +44,56 @@ Return JSON: { "sfx": "description", "needed": true/false }`,
     } else {
       setSfx('');
     }
-    setGenerating(false);
+    } catch (err) {
+      // An LLM failure used to leave this button spinning with nothing said.
+      setSfxError(err?.response?.data?.error || err.message || 'Could not suggest a sound effect');
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const handleGenerateAudio = async () => {
     if (!sfx) return;
     setGeneratingAudio(true);
-    const res = await api.functions.invoke('generateSoundEffect', {
-      text: sfx,
-      scene_id: scene.id,
-    });
-    if (res.data?.audio_url) {
+    setSfxError('');
+    try {
+      const res = await api.functions.invoke('generateSoundEffect', {
+        text: sfx,
+        scene_id: scene.id,
+      });
+      const data = res.data || res;
+      let audioUrl = data.audio_url;
+
+      // Suno usually needs 30-90s, which is longer than the gateway will hold a request
+      // open, so the server hands back a task id and we finish it here.
+      if (!audioUrl && data.task_id) {
+        for (let i = 0; i < 36 && !audioUrl; i++) {
+          await new Promise(r => setTimeout(r, 5000));
+          const pollRes = await api.functions.invoke('pollSoundEffect', {
+            task_id: data.task_id,
+            scene_id: scene.id,
+          });
+          const poll = pollRes.data || pollRes;
+          if (poll.status === 'ready') audioUrl = poll.audio_url;
+          else if (poll.status === 'failed') throw new Error(poll.error || 'Sound effect generation failed');
+        }
+        if (!audioUrl) throw new Error('The sound effect is taking longer than usual. Try again in a moment.');
+      }
+
+      if (!audioUrl) throw new Error('No audio came back from the sound effect provider.');
+
       await api.entities.Scenes.update(scene.id, {
         sound_effect: sfx,
-        sound_effect_url: res.data.audio_url,
+        sound_effect_url: audioUrl,
         sfx_volume: volume,
       });
       onUpdate?.();
+    } catch (err) {
+      // Without this the spinner ran forever and the button stayed disabled.
+      setSfxError(err?.response?.data?.error || err.message || 'Sound effect failed');
+    } finally {
+      setGeneratingAudio(false);
     }
-    setGeneratingAudio(false);
   };
 
   const handleSave = async () => {
@@ -119,6 +153,9 @@ Return JSON: { "sfx": "description", "needed": true/false }`,
             )}
           </div>
         </div>
+      )}
+      {sfxError && (
+        <p className="text-[10px] text-red-600 mt-1">{sfxError}</p>
       )}
     </div>
   );

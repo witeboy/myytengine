@@ -147,7 +147,7 @@ const handler: FnHandler = async (body, ctx) => {
 
   } catch (error) {
     console.error('dedupScenes error:', error.message);
-    throw new HttpError(500, error.message);
+    throw error instanceof HttpError ? error : new HttpError(500, error.message);
   }
 };
 

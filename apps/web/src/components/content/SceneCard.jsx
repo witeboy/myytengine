@@ -13,9 +13,14 @@ import ProviderRegenButtons from './ProviderRegenButtons';
 
 const statusColors = {
   pending: 'bg-gray-100 text-gray-600',
+  breakdown_ready: 'bg-slate-100 text-slate-700',
   prompts_ready: 'bg-yellow-100 text-yellow-800',
+  image_pending: 'bg-blue-100 text-blue-800',
   image_generated: 'bg-green-100 text-green-800',
+  image_failed: 'bg-red-100 text-red-800',
+  video_ready: 'bg-purple-100 text-purple-800',
   video_generated: 'bg-purple-100 text-purple-800',
+  video_failed: 'bg-red-100 text-red-800',
   failed: 'bg-red-100 text-red-800',
 };
 
@@ -168,6 +173,7 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
   const [showAnimEditor, setShowAnimEditor] = useState(false);
   const [rephrasing, setRephrasing] = useState(false);
   const pollRef = useRef(null);
+  const pollFailuresRef = useRef(0);
 
   const hasPendingTask = (
     (scene.video_url?.startsWith('seedance_task:') || scene.video_url?.startsWith('grok_vid_task:') || scene.video_url?.startsWith('veo_task:')) &&
@@ -188,6 +194,7 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
 
     setPolling(true);
     setLoadingVideo(true);
+    pollFailuresRef.current = 0;
     pollRef.current = setInterval(async () => {
       try {
         const res = await api.functions.invoke('pollSceneVideo', { scene_id: scene.id });
@@ -200,11 +207,16 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
           onSceneUpdated?.();
         }
       } catch (err) {
-        console.warn(`Poll error for scene ${scene.scene_number}:`, err?.response?.data?.error || err.message);
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-        setPolling(false);
-        setLoadingVideo(false);
+        // One bad poll is usually a hiccup at the provider. Giving up here left the
+        // scene stuck on "pending" until the page was reloaded, so allow a few misses.
+        pollFailuresRef.current += 1;
+        console.warn(`Poll error for scene ${scene.scene_number} (${pollFailuresRef.current}/5):`, err?.response?.data?.error || err.message);
+        if (pollFailuresRef.current >= 5) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+          setPolling(false);
+          setLoadingVideo(false);
+        }
       }
     }, 12000);
 
@@ -228,9 +240,15 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
 
   const handleRephrase = async () => {
     setRephrasing(true);
-    await api.functions.invoke('rephraseScenePrompt', { scene_id: scene.id });
-    onSceneUpdated?.();
-    setRephrasing(false);
+    try {
+      await api.functions.invoke('rephraseScenePrompt', { scene_id: scene.id });
+      onSceneUpdated?.();
+    } catch (err) {
+      // Without this the button sat on "Rephrasing..." forever after any failure.
+      console.warn('Rephrase failed:', err?.response?.data?.error || err.message);
+    } finally {
+      setRephrasing(false);
+    }
   };
 
   const handleVideo = async () => {
@@ -239,7 +257,10 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
       await onAnimateScene();
     } catch (err) {
       console.warn("Video generation failed:", err.message);
-      setLoadingVideo(false);
+    } finally {
+      // The spinner used to be cleared only by the poll starting, so a submit that
+      // never produced a task left the button disabled until a reload.
+      if (!pollRef.current) setLoadingVideo(false);
     }
   };
 
@@ -315,7 +336,9 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
             {loadingImage ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <ImageIcon className="w-3 h-3 mr-1" />}
             {scene.image_url ? 'Regen' : 'Generate'}
           </Button>
-          <Button size="sm" variant="outline" onClick={handleVideo} disabled={loadingVideo || !scene.image_url} className="flex-1">
+          {/* An image that is still a task id ("nb2lite_task:…") is not animatable: the
+              server rejects it, and the scene used to be marked failed for trying. */}
+          <Button size="sm" variant="outline" onClick={handleVideo} disabled={loadingVideo || !scene.image_url?.startsWith('http')} className="flex-1" title={!scene.image_url?.startsWith('http') ? 'Waiting for this scene’s image to finish' : undefined}>
             {loadingVideo ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Film className="w-3 h-3 mr-1" />}
             Animate
           </Button>

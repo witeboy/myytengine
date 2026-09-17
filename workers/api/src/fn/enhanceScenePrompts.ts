@@ -17,7 +17,9 @@ import { resolveStyleId, styleMapForEngines } from '../lib/visualStyles';
 // ══════════════════════════════════════════════════════════════════
 
 
-const BASE_BATCH_SIZE = 12;
+// Matches generateScenePrompts: the proxy in front of this Worker ends a request at
+// around a minute, and twelve scenes in one AI call runs well past that.
+const BASE_BATCH_SIZE = 6;
 const PARALLEL_PROMPT_BATCHES = 3; // Run 3 Gemini prompt calls concurrently
 
 
@@ -1427,7 +1429,7 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
 
   } catch (error) {
     console.error("❌ generateScenePrompts error:", error.message);
-    throw new HttpError(500, error.message);
+    throw error instanceof HttpError ? error : new HttpError(500, error.message);
   }
 };
 

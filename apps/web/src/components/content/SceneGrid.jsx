@@ -66,7 +66,9 @@ export default function SceneGrid({ scenes, onRefetch, orientation }) {
   const sceneCallbacks = (scene) => ({
     onRegenerateImage: async () => {
       try {
-        await api.functions.invoke('generateSceneImage', { scene_id: scene.id });
+        // force: without it the server skips a scene that already has an image and
+        // answers 200, so Regen spun for five seconds and changed nothing.
+        await api.functions.invoke('generateSceneImage', { scene_id: scene.id, force: true });
         onRefetch();
 
         // Poll until resolved (max 2 min)

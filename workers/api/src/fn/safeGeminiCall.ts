@@ -61,7 +61,7 @@ const handler: FnHandler = async (body, ctx) => {
     const result = await safeGeminiCall(ctx, prompt, temperature || 0.8);
     return result;
   } catch (error) {
-    throw new HttpError(500, error.message);
+    throw error instanceof HttpError ? error : new HttpError(500, error.message);
   }
 };
 

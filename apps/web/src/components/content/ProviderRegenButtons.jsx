@@ -18,7 +18,8 @@ export default function ProviderRegenButtons({ scene, onComplete }) {
       // Submit with specific provider
       await api.functions.invoke('generateSceneImage', {
         scene_id: scene.id,
-        preferred_provider: providerId
+        preferred_provider: providerId,
+        force: true // this scene usually already has an image — that is the point
       });
 
       // Poll until done (max ~2 min)

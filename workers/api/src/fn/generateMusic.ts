@@ -72,8 +72,24 @@ const handler: FnHandler = async (body, ctx) => {
 
     const { track_id, prompt, genre, mood, project_id } = body;
 
-    if (track_id) {
-      await ctx.db.MusicTracks.update(track_id, { status: 'generating' });
+    // A caller that passes only project_id (the sleep stage) used to get a task id back
+    // and nothing else: no row was created, nothing polled it, and the finished music
+    // could never be found again. Give every request a row to write the result into.
+    let trackId = track_id;
+    if (!trackId && project_id) {
+      const created = await ctx.db.MusicTracks.create({
+        project_id,
+        title: 'Generating…',
+        prompt: prompt || '',
+        genre: genre || '',
+        mood: mood || '',
+        status: 'generating',
+        volume: 0.35,
+      });
+      trackId = created?.id || created;
+      console.log(`🎵 Created music track ${trackId} for project ${project_id}`);
+    } else if (trackId) {
+      await ctx.db.MusicTracks.update(trackId, { status: 'generating' });
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -93,10 +109,18 @@ const handler: FnHandler = async (body, ctx) => {
           isSleepProject = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
         }
 
-        if (project?.script) {
+        // Projects has no `script` column — the script lives in the Scripts entity — so
+        // this analysis never ran and every track fell back to the manual prompt.
+        let projectScript = '';
+        try {
+          const scripts = await ctx.db.Scripts.filter({ project_id });
+          projectScript = scripts.find(s => s.version === 'final_aggregated')?.full_script || '';
+        } catch (_) {}
+
+        if (projectScript) {
           console.log(`🎵 Analyzing script for intelligent music selection...`);
-          const analysis = await analyzeScriptForMusic(ctx, 
-            project.script,
+          const analysis = await analyzeScriptForMusic(ctx,
+            projectScript,
             project.niche,
             project.tone
           );
@@ -151,10 +175,22 @@ const handler: FnHandler = async (body, ctx) => {
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     const taskId = await submitMusic(ctx, musicPrompt);
+
+    // The task id used to live only in the browser tab that started the job, so a reload
+    // left the track stuck on "Generating…" with no way to finish or retry it.
+    if (trackId) {
+      try {
+        await ctx.db.MusicTracks.update(trackId, { generation_task_id: taskId, title, prompt: musicPrompt });
+      } catch (err) {
+        console.warn(`Could not save the music task id: ${err.message}`);
+      }
+    }
+
     return {
       success: true,
       status: 'pending',
       task_id: taskId,
+      track_id: trackId,
       music_style: style,
       music_prompt: musicPrompt,
       title,
@@ -166,7 +202,7 @@ const handler: FnHandler = async (body, ctx) => {
     if (body?.track_id) {
       try { await ctx.db.MusicTracks.update(body.track_id, { status: 'failed' }); } catch (_) {}
     }
-    throw new HttpError(500, error.message);
+    throw error instanceof HttpError ? error : new HttpError(500, error.message);
   }
 };
 

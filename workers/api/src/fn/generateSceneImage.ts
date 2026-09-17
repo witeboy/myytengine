@@ -64,6 +64,10 @@ async function kieCreateTask(apiKey, model, input) {
       await new Promise(r => setTimeout(r, waitMs));
     }
   }
+  // Every attempt was rate limited. Falling out of the loop used to return undefined,
+  // which was then written to the scene as the task id "nb2lite_task:undefined" and
+  // reported as a successful submit — the scene polled a task that never existed.
+  throw new Error(`Kie createTask was rate limited on all ${MAX_RETRIES} attempts (model ${model})`);
 }
 
 // ─────────────────────────────────────────────
@@ -225,7 +229,7 @@ function detectCharacterPresence(scene) {
 // SINGLE SCENE PROCESSOR — SUBMIT ONLY
 // ─────────────────────────────────────────────
 
-async function processScene(ctx, scene, project, kieApiKey, aspectRatio, referenceImageUrl, providerPref = 'auto') {
+async function processScene(ctx, scene, project, kieApiKey, aspectRatio, referenceImageUrl, providerPref = 'auto', force = false) {
   const sceneNum = scene.scene_number;
   const isSleepProject = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story' || project.visual_style === 'sleep_ambient';
 
@@ -233,8 +237,10 @@ async function processScene(ctx, scene, project, kieApiKey, aspectRatio, referen
     return { scene_id: scene.id, scene_number: sceneNum, status: 'skipped', reason: 'no_prompt' };
   }
 
-  // Skip if already generated or already pending
-  if (scene.status === 'image_generated' && scene.image_url && !scene.image_url.startsWith('seedream_task:') && !scene.image_url.startsWith('grok_img_task:') && !scene.image_url.startsWith('nano_task:') && !scene.image_url.startsWith('nb2lite_task:')) {
+  // Skip if already generated or already pending — unless the user asked for this scene
+  // again. Regenerate used to hit this skip and return 200 with nothing done, so the
+  // button spun, reported success, and produced the same picture.
+  if (!force && scene.status === 'image_generated' && scene.image_url && !scene.image_url.startsWith('seedream_task:') && !scene.image_url.startsWith('grok_img_task:') && !scene.image_url.startsWith('nano_task:') && !scene.image_url.startsWith('nb2lite_task:')) {
     return { scene_id: scene.id, scene_number: sceneNum, status: 'skipped', reason: 'already_generated' };
   }
   if (scene.status === 'image_pending') {
@@ -436,7 +442,9 @@ const handler: FnHandler = async (body, ctx) => {
     const user = ctx.user;
 
     
-    const { scene_id, scene_ids, project_id, preferred_provider } = body;
+    // `force`: regenerate scenes that already have an image (the Regen and per-provider
+    // buttons), instead of skipping them and reporting success.
+    const { scene_id, scene_ids, project_id, preferred_provider, force } = body;
 
     const KIE_API_KEY = await ctx.keys.get('KIE_API_KEY');
     if (!KIE_API_KEY) {
@@ -511,7 +519,7 @@ const handler: FnHandler = async (body, ctx) => {
 
     // ── Submit all with concurrency pool ───────────────────────
     const tasks = scenesToProcess.map(scene => () =>
-      processScene(ctx, scene, project, KIE_API_KEY, aspectRatio, referenceImageUrl, providerPref)
+      processScene(ctx, scene, project, KIE_API_KEY, aspectRatio, referenceImageUrl, providerPref, force === true)
     );
 
     const results = await processWithConcurrency(tasks, MAX_CONCURRENT);

@@ -350,9 +350,18 @@ RULES:
     // ═══ SAVE TO DATABASE ═══
     try {
       const old = await ctx.db.Scenes.filter({ project_id });
+      // This deleted everything unconditionally, so running it a second time threw away
+      // images and videos that had already been generated and paid for.
+      const withMedia = old.filter(s =>
+        (s.image_url && s.image_url.startsWith('http')) || (s.video_url && s.video_url.startsWith('http'))
+      );
+      if (withMedia.length > 0 && body?.force !== true) {
+        throw new HttpError(409, `These ${old.length} scenes already have ${withMedia.length} generated image(s) or video(s). Regenerating the prompts deletes them. Send force: true to replace them anyway.`);
+      }
       console.log(`🧹 Deleting ${old.length} old scenes...`);
       for (const s of old) await ctx.db.Scenes.delete(s.id);
     } catch (delErr) {
+      if (delErr instanceof HttpError) throw delErr;
       console.warn(`⚠ Delete failed: ${delErr.message}`);
     }
 
@@ -393,7 +402,7 @@ RULES:
 
   } catch (error) {
     console.error('generateProgressionPrompts error:', error.message);
-    throw new HttpError(500, error.message);
+    throw error instanceof HttpError ? error : new HttpError(500, error.message);
   }
 };
 

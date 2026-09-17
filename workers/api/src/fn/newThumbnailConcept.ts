@@ -397,7 +397,7 @@ Do NOT add any other text.`;
 
   } catch (error) {
     console.error('newThumbnailConcept error:', error.message);
-    throw new HttpError(500, error.message);
+    throw error instanceof HttpError ? error : new HttpError(500, error.message);
   }
 };
 

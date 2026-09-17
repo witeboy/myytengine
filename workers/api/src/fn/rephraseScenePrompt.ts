@@ -1301,7 +1301,7 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
 
   } catch (error) {
     console.error("❌ generateScenePrompts error:", error.message);
-    throw new HttpError(500, error.message);
+    throw error instanceof HttpError ? error : new HttpError(500, error.message);
   }
 };
 

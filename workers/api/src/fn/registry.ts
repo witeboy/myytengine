@@ -14,6 +14,7 @@ import healthCheck from './healthCheck';
 import uploadToR2 from './uploadToR2';
 import proxyFetchAsset from './proxyFetchAsset';
 import generateSoundEffect from './generateSoundEffect';
+import pollSoundEffect from './pollSoundEffect';
 import invokeLLM from './invokeLLM';
 import callClaudeProxy from './callClaudeProxy';
 import cleanScenePrompt from './cleanScenePrompt';
@@ -73,6 +74,7 @@ export const FUNCTIONS: Record<string, FnHandler> = {
   uploadToR2,
   proxyFetchAsset,
   generateSoundEffect,
+  pollSoundEffect,
   invokeLLM,
   callClaudeProxy,
 

@@ -20,17 +20,42 @@ import type { FnHandler } from '../types';
 
 async function saveVoiceover(ctx, settings, projectId, audioUrl) {
   const ownBase = ctx.env.MEDIA_PUBLIC_BASE.replace(/\/$/, '');
-  const permanentUrl = audioUrl.startsWith(`${ownBase}/`)
-    ? audioUrl
-    : (await ingestUrl(ctx, audioUrl, { tier: 'durable', prefix: 'voiceover' })).url;
-  await ctx.db.ProductionSettings.update(settings.id, {
-    voiceover_url: permanentUrl,
-    voiceover_status: 'completed',
-  });
-  try {
-    await ctx.db.Projects.update(projectId, { voiceover_url: permanentUrl });
-  } catch (e) {}
-  return permanentUrl;
+
+  const write = async (url: string) => {
+    await ctx.db.ProductionSettings.update(settings.id, {
+      voiceover_url: url,
+      voiceover_status: 'completed',
+    });
+    try {
+      await ctx.db.Projects.update(projectId, { voiceover_url: url });
+    } catch (e) {}
+  };
+
+  if (audioUrl.startsWith(`${ownBase}/`)) {
+    await write(audioUrl);
+    return audioUrl;
+  }
+
+  // Copying the finished narration into R2 used to happen right here, inside the poll.
+  // A 40-minute sleep story is tens of megabytes, so the request was cut off by the
+  // gateway before it finished: the row stayed 'generating', the next poll saw the job
+  // was done and started the same download again, forever. Save the provider's URL
+  // first so the voiceover is usable immediately, then re-host in the background and
+  // swap the URL when that finishes.
+  await write(audioUrl);
+
+  ctx.waitUntil((async () => {
+    try {
+      const hosted = await ingestUrl(ctx, audioUrl, { tier: 'durable', prefix: 'voiceover' });
+      await write(hosted.url);
+      console.log(`📦 Voiceover re-hosted: ${hosted.url.substring(0, 80)}`);
+    } catch (err: any) {
+      // The provider URL still works; it just expires sooner than our own copy.
+      console.warn(`Voiceover re-host failed, keeping the provider URL: ${err?.message || err}`);
+    }
+  })());
+
+  return audioUrl;
 }
 
 const handler: FnHandler = async (body, ctx) => {
@@ -201,7 +226,7 @@ const handler: FnHandler = async (body, ctx) => {
 
   } catch (error) {
     console.error(`❌ pollVoiceover error: ${error.message}`);
-    throw new HttpError(500, error.message);
+    throw error instanceof HttpError ? error : new HttpError(500, error.message);
   }
 };
 

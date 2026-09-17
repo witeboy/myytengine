@@ -19,6 +19,7 @@ function VoicePanel({ title, icon, color, badgeText, voices, loadingVoices, tabs
   const previewAudioRef = useRef(null);
   const pollRef = useRef(null);
   const pollTimeoutRef = useRef(null);
+  const pollFailuresRef = useRef(0);
   const [previewingVoice, setPreviewingVoice] = useState(null);
   const [loadingPreview, setLoadingPreview] = useState(null);
   const [previewCache, setPreviewCache] = useState({});
@@ -53,6 +54,7 @@ function VoicePanel({ title, icon, color, badgeText, voices, loadingVoices, tabs
   const startPolling = () => {
     if (pollRef.current) clearInterval(pollRef.current);
     if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+    pollFailuresRef.current = 0;
     setGenerating(true);
     pollRef.current = setInterval(async () => {
       try {
@@ -66,7 +68,28 @@ function VoicePanel({ title, icon, color, badgeText, voices, loadingVoices, tabs
           setError(data.error || 'Voiceover generation failed.'); setGenerating(false); clearInterval(pollRef.current); pollRef.current = null;
         }
       } catch (err) {
-        setError(err?.response?.data?.error || err.message);
+        // The loop used to keep running through every error for a full hour, showing a
+        // spinner and an error side by side. Stop after a few, and stop at once when
+        // there is no job to poll — that state can never resolve on its own.
+        const message = err?.response?.data?.error || err.message || '';
+        setError(message);
+        pollFailuresRef.current += 1;
+        const noTask = /no task_id/i.test(message);
+        if (noTask || pollFailuresRef.current >= 5) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+          setGenerating(false);
+          if (noTask) {
+            setError('This voiceover was never submitted. Generate it again.');
+            try {
+              const records = await api.entities.ProductionSettings.filter({ project_id: project.id });
+              if (records[0]) {
+                await api.entities.ProductionSettings.update(records[0].id, { voiceover_status: 'failed' });
+                setSettings({ ...records[0], voiceover_status: 'failed' });
+              }
+            } catch (_) {}
+          }
+        }
       }
     }, 10000);
     pollTimeoutRef.current = setTimeout(() => {

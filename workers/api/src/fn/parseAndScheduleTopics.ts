@@ -289,7 +289,7 @@ Every topic (0-indexed) must appear exactly once in the plan.`;
     };
   } catch (error) {
     console.error("parseAndScheduleTopics error:", error.message);
-    throw new HttpError(500, error.message);
+    throw error instanceof HttpError ? error : new HttpError(500, error.message);
   }
 };
 

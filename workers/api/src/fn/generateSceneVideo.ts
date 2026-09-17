@@ -138,12 +138,16 @@ const handler: FnHandler = async (body, ctx) => {
 
   } catch (error) {
     console.error("generateSceneVideo error:", error.message, error.stack);
-    if (scene_id) {
+    // A rejected request (no image yet, wrong URL shape) is not a failed scene. Marking
+    // it 'failed' took the scene out of image polling AND out of every bulk action, so a
+    // paid image was never collected and the scene could only be fixed one at a time.
+    const isRequestError = error instanceof HttpError && error.status >= 400 && error.status < 500;
+    if (scene_id && !isRequestError) {
       try {
         await ctx.db.Scenes.update(scene_id, { status: "failed" });
       } catch (_) {}
     }
-    throw new HttpError(500, error.message);
+    throw error instanceof HttpError ? error : new HttpError(500, error.message);
   }
 };
 
