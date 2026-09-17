@@ -10,7 +10,9 @@ import type { FnHandler } from '../types';
 // Generate a short TTS preview for a voice — all via AI33 proxy
 
 const POLL_INTERVAL_MS = 2000;
-const MAX_POLLS = 30;
+// A preview is one sentence. Twelve polls is ~25s, which stays inside the gateway
+// timeout in front of this Worker; sixty seconds of waiting only produced a dead socket.
+const MAX_POLLS = 12;
 
 const handler: FnHandler = async (body, ctx) => {
   try {
@@ -25,7 +27,6 @@ const handler: FnHandler = async (body, ctx) => {
     const previewText = "In a world where stories shape reality, every voice carries the power to transform silence into something unforgettable.";
     const headers = { 'Content-Type': 'application/json', 'xi-api-key': AI33_KEY };
 
-    let submitUrl, submitBody;
 
 
     // ── MiniMax Direct — sync TTS, instant preview ──────────────
@@ -83,12 +84,15 @@ const handler: FnHandler = async (body, ctx) => {
           for (let i = 0; i < audioHex.length; i += 2) {
             bytes[i / 2] = parseInt(audioHex.substr(i, 2), 16);
           }
-          const blob = new Blob([bytes], { type: 'audio/mpeg' });
-          const base64 = btoa(String.fromCharCode(...bytes.slice(0, 500000)));
-          // Return as data URL for short preview
+          // Spreading a whole MP3 into String.fromCharCode overflows the argument stack
+          // on anything but a tiny clip, so encode in chunks.
+          let binary = '';
+          for (let i = 0; i < bytes.length; i += 8192) {
+            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+          }
           return {
             success: true,
-            preview_url: `data:audio/mpeg;base64,${btoa(String.fromCharCode.apply(null, bytes))}`,
+            preview_url: `data:audio/mpeg;base64,${btoa(binary)}`,
             voice_id,
           };
         }
@@ -100,23 +104,26 @@ const handler: FnHandler = async (body, ctx) => {
       }
     }
 
-    if (provider === 'minimax') {
-      submitUrl = 'https://api.ai33.pro/v1m/task/text-to-speech';
-      submitBody = JSON.stringify({
-        text: previewText,
-        model: 'speech-2.6-hd',
-        voice_setting: { voice_id, vol: 1, pitch: 0, speed: 1 },
-        language_boost: 'Auto',
-      });
-    } else {
-      submitUrl = `https://api.ai33.pro/v1/text-to-speech/${voice_id}?output_format=mp3_44100_128`;
-      submitBody = JSON.stringify({
-        text: previewText,
-        model_id: 'eleven_multilingual_v2',
-      });
-    }
+    // The voice ids the panel shows come from AI33's v3 library already prefixed
+    // (elevenlabs_, minimax_, clone_). This used to post them to an ElevenLabs-shaped
+    // endpoint that expects a bare id, so previews failed for every voice without a
+    // provider-supplied sample. Use the same v3 endpoint the real voiceover uses.
+    const supportedPrefixes = ['elevenlabs_', 'minimax_', 'clone_', 'edge_', 'kokoro_', 'vbee_', 'fishaudio_'];
+    const v3VoiceId = supportedPrefixes.some(p => String(voice_id).startsWith(p))
+      ? String(voice_id)
+      : `${provider === 'minimax' ? 'minimax' : 'elevenlabs'}_${voice_id}`;
 
-    const submitRes = await fetch(submitUrl, { method: 'POST', headers, body: submitBody });
+    const form = new FormData();
+    form.append('text', previewText);
+    form.append('voice_id', v3VoiceId);
+    form.append('speed', '1');
+    form.append('with_transcript', 'false');
+
+    const submitRes = await fetch('https://api.ai33.pro/v3/text-to-speech', {
+      method: 'POST',
+      headers: { 'xi-api-key': AI33_KEY }, // FormData sets its own content type
+      body: form,
+    });
     const submitData = await submitRes.json();
     if (!submitData.success || !submitData.task_id) {
       throw new Error(`TTS submit failed: ${JSON.stringify(submitData).substring(0, 200)}`);

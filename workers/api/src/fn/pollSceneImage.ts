@@ -164,7 +164,10 @@ const handler: FnHandler = async (body, ctx) => {
       return { success: true, done: true, results: [], pending: 0, completed: 0, failed: 0 };
     }
 
-    const staleThresholdMs = 4 * 60 * 1000;
+    // A queued 2K or reference-image job can legitimately take several minutes. At four
+    // minutes this declared such a job stale and resubmitted it to another provider —
+    // orphaning the original result and paying for it twice.
+    const staleThresholdMs = 12 * 60 * 1000;
     const now = Date.now();
     const results: any[] = [];
 

@@ -105,20 +105,34 @@ const handler: FnHandler = async (body, ctx) => {
       };
     }
 
+    // Never delete a duplicate that already has generated media: those images and videos
+    // were paid for, and the copy being kept may have none.
+    const withMedia = duplicates.filter(d => {
+      const scene = sorted.find(s => s.id === d.scene_id);
+      return (scene?.image_url && scene.image_url.startsWith('http'))
+        || (scene?.video_url && scene.video_url.startsWith('http'));
+    });
+    const deletable = duplicates.filter(d => !withMedia.includes(d));
+    if (withMedia.length > 0) {
+      console.warn(`⚠️ Keeping ${withMedia.length} duplicate scene(s) that already have images or video`);
+    }
+
     // Delete duplicates in parallel batches
     let deleted = 0;
     const BATCH = 10;
-    for (let i = 0; i < duplicates.length; i += BATCH) {
-      const batch = duplicates.slice(i, i + BATCH);
+    for (let i = 0; i < deletable.length; i += BATCH) {
+      const batch = deletable.slice(i, i + BATCH);
       const results = await Promise.allSettled(
         batch.map(d => ctx.db.Scenes.delete(d.scene_id))
       );
       deleted += results.filter(r => r.status === 'fulfilled').length;
     }
-    console.log(`✓ Deleted ${deleted}/${duplicates.length}`);
+    console.log(`✓ Deleted ${deleted}/${deletable.length}`);
 
-    // Renumber in parallel batches
-    const remaining = keep.sort((a, b) => (a.scene_number || 0) - (b.scene_number || 0));
+    // Renumber from what actually survived. Renumbering the intended survivors while a
+    // delete had failed produced the duplicate scene numbers this function exists to fix.
+    const survivors = await ctx.db.Scenes.filter({ project_id });
+    const remaining = survivors.sort((a, b) => (a.scene_number || 0) - (b.scene_number || 0));
     let renumbered = 0;
     const renumberOps = remaining
       .map((s, i) => ({ id: s.id, oldNum: s.scene_number, newNum: i + 1 }))
@@ -137,7 +151,8 @@ const handler: FnHandler = async (body, ctx) => {
       original_scenes: sorted.length,
       duplicates_found: duplicates.length,
       deleted,
-      delete_failed: duplicates.length - deleted,
+      delete_failed: deletable.length - deleted,
+      kept_with_media: withMedia.length,
       remaining_scenes: remaining.length,
       renumbered,
       reduction_percent: sorted.length > 0 ? Math.round((duplicates.length / sorted.length) * 100) : 0,

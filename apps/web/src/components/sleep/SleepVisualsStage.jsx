@@ -78,6 +78,25 @@ export default function SleepVisualsStage({ projectId, project, scenes, onRefetc
       }
     }
 
+    // Submitting is only half the job: images arrive later and something has to collect
+    // them. Nothing here polled, so scenes sat on a task id until the user happened to
+    // open Content Generation and press "Sync Results".
+    for (let attempt = 0; attempt < 40; attempt++) {
+      await new Promise(r => setTimeout(r, 6000));
+      let pending = 0;
+      try {
+        const pollRes = await api.functions.invoke('pollSceneImage', { project_id: projectId });
+        pending = (pollRes.data || pollRes)?.pending ?? 0;
+      } catch (err) {
+        console.warn('Image poll failed:', err?.response?.data?.error || err.message);
+      }
+      await onRefetch();
+      const fresh = await api.entities.Scenes.filter({ project_id: projectId });
+      const done = fresh.filter(s => s.image_url && s.image_url.startsWith('http')).length;
+      setPhase(`Rendering images... ${done}/${fresh.length}`);
+      if (pending === 0) break;
+    }
+
     await onRefetch();
     setGenerating(false);
     setPhase('');
