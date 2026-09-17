@@ -52,10 +52,12 @@ const handler: FnHandler = async (body, ctx) => {
 
     // Extract task ID from any provider prefix
     let taskId = null;
+    let provider = 'video';
     const prefixes = ['seedance_task:', 'runway_task:', 'hailuo_task:', 'grok_vid_task:', 'veo_task:'];
     for (const prefix of prefixes) {
       if (videoUrl.startsWith(prefix)) {
         taskId = videoUrl.replace(prefix, '');
+        provider = prefix.replace(/_(vid_)?task:$/, '');
         break;
       }
     }
@@ -68,7 +70,8 @@ const handler: FnHandler = async (body, ctx) => {
       throw new HttpError(400, 'No video task found on this scene');
     }
 
-    console.log(`🔍 Polling Grok video task: ${taskId} for scene ${scene.scene_number}`);
+    // Said "Grok" for every provider, which sends anyone reading these logs to the wrong API.
+    console.log(`🔍 Polling ${provider} video task: ${taskId} for scene ${scene.scene_number}`);
 
     // ══════════════════════════════════════════════════════════════
     // POLL TASK STATUS via /jobs/recordInfo
