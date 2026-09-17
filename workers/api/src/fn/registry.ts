@@ -29,6 +29,7 @@ import generateScriptBatches from './generateScriptBatches';
 import initializeScriptBatches from './initializeScriptBatches';
 import longViralGenerateScript from './longViralGenerateScript';
 import longViralSceneBreakdown from './longViralSceneBreakdown';
+import planSceneBeats from './planSceneBeats';
 import selectHook from './selectHook';
 import shortsGenerateScript from './shortsGenerateScript';
 import shortsSceneBreakdown from './shortsSceneBreakdown';
@@ -85,6 +86,7 @@ export const FUNCTIONS: Record<string, FnHandler> = {
   sleepSceneBreakdown,
   shortsSceneBreakdown,
   longViralSceneBreakdown,
+  planSceneBeats,
   explainerSceneBreakdown,
   generateScenePrompts,
   cleanScenePrompt,

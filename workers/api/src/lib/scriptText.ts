@@ -31,6 +31,15 @@ export function stripTtsMarkers(text: string | null | undefined): string {
     .trim();
 }
 
+/**
+ * The canonical sentence splitter. Scene planning and the breakdown must agree on what
+ * "sentence 12" means, so both import this one rather than keeping their own copy.
+ */
+export function splitIntoSentences(text: string): string[] {
+  const raw = (text || '').match(/[^.!?…]+[.!?…]+["']?[\s]*/g) || [text || ''];
+  return raw.map(s => s.trim()).filter(Boolean);
+}
+
 /** True when a script still carries control tokens — used to report, not to guess. */
 export function hasTtsMarkers(text: string | null | undefined): boolean {
   return typeof text === 'string' && /<\|[^|>]*\|>/.test(text);

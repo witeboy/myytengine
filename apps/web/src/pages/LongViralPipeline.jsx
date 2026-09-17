@@ -47,11 +47,12 @@ export default function LongViralPipeline() {
   // How often the video cuts. The breakdown gives every scene a slice of narration, so
   // this — not the video length — decides how many scenes (and images) a script becomes.
   const PACING = [
+    { id: 'director', label: "Director's beats", words: 14, blurb: 'Scenes break where the story turns. The count comes from the script.' },
     { id: 'fast', label: 'Fast', words: 7, blurb: 'A cut every ~3s. Relentless, most scenes.' },
     { id: 'standard', label: 'Standard', words: 12, blurb: 'A cut every ~5s. Documentary pace.' },
     { id: 'cinematic', label: 'Cinematic', words: 18, blurb: 'A cut every ~7s. Lets shots breathe.' },
   ];
-  const [pacing, setPacing] = useState('fast');
+  const [pacing, setPacing] = useState('director');
   useEffect(() => {
     if (project?.scene_pacing) setPacing(project.scene_pacing);
   }, [project?.scene_pacing]);
@@ -163,9 +164,13 @@ export default function LongViralPipeline() {
                 <div className="space-y-2">
                   <div className="flex items-baseline justify-between">
                     <h4 className="text-sm font-semibold text-gray-700">Scene pacing</h4>
-                    <span className="text-xs text-gray-500">~{estimatedScenes} scenes · about ${(estimatedScenes * 0.02).toFixed(2)} of images</span>
+                    <span className="text-xs text-gray-500">
+                      {pacing === 'director'
+                        ? 'The script decides — roughly ' + estimatedScenes + ' scenes'
+                        : `~${estimatedScenes} scenes · about $${(estimatedScenes * 0.02).toFixed(2)} of images`}
+                    </span>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                     {PACING.map(option => (
                       <button
                         key={option.id}

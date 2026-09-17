@@ -1262,6 +1262,11 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
 
 
       const sceneDirections = scenesWithNotes.map(s => {
+        // From the beat plan, when the breakdown worked from the story's turning points
+        // rather than a word count. It says why this scene exists and how it should feel.
+        const beatLine = s.director?.beat_name || s.director?.pacing || s.director?.directors_vision
+          ? `\n  Beat: ${s.director.beat_name || '—'}${s.director.pacing ? ` | Pacing: ${s.director.pacing}` : ''}${s.director.directors_vision ? `\n  Director's vision: ${s.director.directors_vision}` : ''}`
+          : '';
         // Resolve arc position: prefer director.phase (from breakdown), fall back to arc_position, then 'rising'
         const arcPosition = s.director?.phase || s.director?.arc_position || 'rising';
         const arcAnim = getArcAnimationGuidance(arcPosition);
@@ -1280,7 +1285,7 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
         const bodyDirective = getBodyProportionDirective(s.director?.shot_type || 'MS — Medium Shot');
 
         if (!s.director) {
-          return `Scene ${s.scene_number}: (No director notes — generate from narration)\n  Narration: "${s.narration_text}"\n  Duration: ${sceneDuration}s\n  Character Detail Level: ${identityTier.toUpperCase()} (match description depth to this)\n  Camera Feel: ${bodyDirective}\n  Arc Phase: ${arcPosition}\n  Arc Animation: ${arcAnim}${propsLine}`;
+          return `Scene ${s.scene_number}: (No director notes — generate from narration)\n  Narration: "${s.narration_text}"${beatLine}\n  Duration: ${sceneDuration}s\n  Character Detail Level: ${identityTier.toUpperCase()} (match description depth to this)\n  Camera Feel: ${bodyDirective}\n  Arc Phase: ${arcPosition}\n  Arc Animation: ${arcAnim}${propsLine}`;
         }
         // Build narrative position label for this scene
         const sceneTotal = allScenes.length || 1;
@@ -1296,7 +1301,7 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
           : '';
 
         return `Scene ${s.scene_number} [${posLabel} — ${scenePct}% through]:
-  Narration: "${s.narration_text}"
+  Narration: "${s.narration_text}"${beatLine}
   Duration: ${sceneDuration}s${emotionLine}
   Visual Concept: ${s.director.visual_concept}
   Shot Type: ${s.director.shot_type}
@@ -1335,7 +1340,20 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
 - FORBIDDEN in all prompts: ${genreForbidden}
 This genre mandate overrides generic defaults. Every image must feel like it belongs to this specific visual world.` : '';
 
+      // One locked look for the whole video, written once by planSceneBeats. Every prompt
+      // opens from the same bible so scene 200 belongs to the same film as scene 1.
+      let bible = null;
+      try { bible = JSON.parse(project.visual_style_bible || 'null'); } catch (_) { bible = null; }
+      const styleBibleBlock = bible?.cinematic_style ? `
+**VISUAL STYLE BIBLE — the locked look of this film. EVERY image_prompt must open by invoking these, before describing the subject:**
+- Medium and texture: ${bible.cinematic_style}
+- Colour and light: ${bible.color_palette_and_lighting}
+- Camera and lens: ${bible.camera_and_lens_profile}
+Describe these physically in each prompt. Do not name them as labels, and never fall back on empty words like "stunning" or "photorealistic".` : '';
+
      const prompt = `**MISSION: Convert Director's Notes → Production-Ready Image & Animation Prompts**
+
+${styleBibleBlock}
 
 ${genreMandateBlock}
 

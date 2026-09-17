@@ -7,6 +7,7 @@ import { HttpError } from '../lib/http';
 import { geminiFetch } from '../lib/ai';
 import type { FnHandler } from '../types';
 import { stripTtsMarkers } from '../lib/scriptText';
+import { beatsToSceneBeats, normalizeBeats } from '../lib/beatPlan';
 
 
 // ══════════════════════════════════════════════════════════════════
@@ -183,13 +184,37 @@ const handler: FnHandler = async (body, ctx) => {
     const sentences = splitIntoSentences(fullScript);
     console.log(`📝 Script: ${sentences.length} sentences detected`);
 
-    // ── Step 2: Apply scene rules → build beat list ──────────────────────────
-    // scene_pacing: 'fast' (default, a cut every ~3s), 'standard' (~5s), 'cinematic' (~7s).
+    // ── Step 2: Decide where the scenes break ────────────────────────────────
+    // 'director' uses the beat plan from planSceneBeats — scenes break where the story
+    // turns, and the count falls out of that. The word-count paces remain as fallbacks:
+    // 'fast' (a cut every ~3s), 'standard' (~5s), 'cinematic' (~7s).
     const pacing = String(project.scene_pacing || 'fast').toLowerCase();
-    const wordsPerBeat = PACING_WORDS[pacing] || PACING_WORDS.fast;
-    const allBeats = buildSceneBeats(sentences, wordsPerBeat);
+    let allBeats;
+    let planNote = '';
+
+    if (pacing === 'director') {
+      let plan = null;
+      try { plan = JSON.parse(project.scene_beats || 'null'); } catch (_) { plan = null; }
+      const fingerprint = `${sentences.length}:${fullScript.length}`;
+      const usable = plan?.fingerprint === fingerprint && Array.isArray(plan.beats) && plan.beats.length > 0;
+
+      if (usable) {
+        const beats = normalizeBeats(plan.beats, sentences.length);
+        allBeats = beatsToSceneBeats(beats, sentences);
+        planNote = `director beats (${beats.length} beats → ${allBeats.length} scenes)`;
+      } else {
+        // Planning has not run for this script yet. Rather than refuse, fall back to an
+        // even pace and say so, so a breakdown never dead-ends.
+        allBeats = buildSceneBeats(sentences, PACING_WORDS.standard);
+        planNote = 'no beat plan for this script yet — used standard pacing';
+      }
+    } else {
+      const wordsPerBeat = PACING_WORDS[pacing] || PACING_WORDS.fast;
+      allBeats = buildSceneBeats(sentences, wordsPerBeat);
+      planNote = `${pacing} (${wordsPerBeat} words/scene)`;
+    }
     const totalScenes = allBeats.length;
-    console.log(`🎬 Long Viral: ${durationMin}min | ${sentences.length} sentences → ${totalScenes} scene beats | pacing ${pacing} (${wordsPerBeat} words/scene)`);
+    console.log(`🎬 Long Viral: ${durationMin}min | ${sentences.length} sentences → ${totalScenes} scene beats | ${planNote}`);
 
     // ── Step 3: Chunk beats into sub-batches for AI ──────────────────────────
     const beatChunks = chunkBeats(allBeats);
@@ -437,6 +462,11 @@ Return ONLY valid JSON:
         is_multi_angle: beat.is_multi_angle || false,
         angle_index: beat.angle_index ?? 0,
         total_angles: beat.total_angles ?? 1,
+        // From the director's beat plan, so the prompt engine and the editor can see why
+        // this scene exists and how it should feel.
+        beat_name: beat.beat_name || '',
+        pacing: beat.pacing || '',
+        directors_vision: beat.directors_vision || '',
       };
       return {
         project_id,

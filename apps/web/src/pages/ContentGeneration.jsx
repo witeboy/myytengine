@@ -693,6 +693,21 @@ export default function ContentGeneration() {
   // ═══════════════════════════════════════════════════════════════
   const runLongViralBreakdown = async ({ resume = false, onProgress } = {}) => {
     const notify = onProgress || (() => {});
+    // Director's beats: read the script for its turning points before cutting anything,
+    // so the scene count comes from the story rather than from a word rule. Resumable —
+    // the server remembers how far it has read.
+    if ((project?.scene_pacing || '') === 'director') {
+      notify('Reading the script for its dramatic beats...');
+      let planned = false;
+      for (let attempt = 0; attempt < 30 && !planned; attempt++) {
+        const planRes = await api.functions.invoke('planSceneBeats', { project_id: projectId });
+        const plan = planRes?.data || planRes;
+        planned = plan?.done === true;
+        notify(`Finding the beats... ${plan?.beats ?? 0} so far (${plan?.next_sentence ?? 0}/${plan?.total_sentences ?? '?'} sentences read)`);
+      }
+      if (!planned) throw new Error('Could not finish reading the script for beats. Try again — it resumes where it stopped.');
+    }
+
     let breakdownDone = false;
     let resumeMode = resume;
     let nextBatch = resume ? null : 0; // null = let the server find where to pick up
