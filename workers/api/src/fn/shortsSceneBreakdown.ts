@@ -6,6 +6,7 @@
 import { HttpError } from '../lib/http';
 import { anthropicFetch, geminiFetch, hasAiProvider } from '../lib/ai';
 import type { FnHandler } from '../types';
+import { stripTtsMarkers } from '../lib/scriptText';
 
 
 // ══════════════════════════════════════════════════════════════════
@@ -365,7 +366,7 @@ const handler: FnHandler = async (body, ctx) => {
       throw new HttpError(400, 'No final script found.');
     }
 
-    const fullScript = script.full_script;
+    const fullScript = stripTtsMarkers(script.full_script);
 
     let shortsNiche = 'finance';
     if (project.channel_id) {

@@ -44,6 +44,21 @@ export default function LongViralPipeline() {
     if (project?.video_duration_minutes) setDurationMin(project.video_duration_minutes);
   }, [project?.video_duration_minutes]);
 
+  // How often the video cuts. The breakdown gives every scene a slice of narration, so
+  // this — not the video length — decides how many scenes (and images) a script becomes.
+  const PACING = [
+    { id: 'fast', label: 'Fast', words: 7, blurb: 'A cut every ~3s. Relentless, most scenes.' },
+    { id: 'standard', label: 'Standard', words: 12, blurb: 'A cut every ~5s. Documentary pace.' },
+    { id: 'cinematic', label: 'Cinematic', words: 18, blurb: 'A cut every ~7s. Lets shots breathe.' },
+  ];
+  const [pacing, setPacing] = useState('fast');
+  useEffect(() => {
+    if (project?.scene_pacing) setPacing(project.scene_pacing);
+  }, [project?.scene_pacing]);
+  const pacingChoice = PACING.find(p => p.id === pacing) || PACING[0];
+  // ~150 spoken words a minute, so words-per-scene sets the seconds per scene.
+  const estimatedScenes = Math.round((durationMin * 150) / pacingChoice.words);
+
   const hasFinalScript = scripts.some(s => s.version === 'final_aggregated');
 
   let activeStage = 'blueprint';
@@ -54,7 +69,7 @@ export default function LongViralPipeline() {
 
   const handleSaveDuration = async () => {
     setSavingDuration(true);
-    await api.entities.Projects.update(projectId, { video_duration_minutes: durationMin });
+    await api.entities.Projects.update(projectId, { video_duration_minutes: durationMin, scene_pacing: pacing });
     await refetchProject();
     setSavingDuration(false);
   };
@@ -137,8 +152,35 @@ export default function LongViralPipeline() {
                   </div>
                   <div className="bg-green-50 rounded-lg p-4 text-center">
                     <Layers className="w-5 h-5 text-green-600 mx-auto mb-1" />
-                    <p className="text-2xl font-bold text-green-700">~{Math.round(durationMin * 60 / 5)}</p>
+                    {/* This used to assume five seconds a scene regardless of pacing,
+                        so it promised half the scenes the breakdown actually created. */}
+                    <p className="text-2xl font-bold text-green-700">~{estimatedScenes}</p>
                     <p className="text-xs text-green-600">scenes</p>
+                  </div>
+                </div>
+
+                {/* Scene pacing — the real driver of scene count and image spend */}
+                <div className="space-y-2">
+                  <div className="flex items-baseline justify-between">
+                    <h4 className="text-sm font-semibold text-gray-700">Scene pacing</h4>
+                    <span className="text-xs text-gray-500">~{estimatedScenes} scenes · about ${(estimatedScenes * 0.02).toFixed(2)} of images</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {PACING.map(option => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setPacing(option.id)}
+                        className={`rounded-lg border p-3 text-left transition ${
+                          pacing === option.id
+                            ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+                            : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <p className="text-sm font-medium text-gray-900">{option.label}</p>
+                        <p className="text-[11px] leading-tight text-gray-500">{option.blurb}</p>
+                      </button>
+                    ))}
                   </div>
                 </div>
 

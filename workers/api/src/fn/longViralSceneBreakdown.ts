@@ -6,6 +6,7 @@
 import { HttpError } from '../lib/http';
 import { geminiFetch } from '../lib/ai';
 import type { FnHandler } from '../types';
+import { stripTtsMarkers } from '../lib/scriptText';
 
 
 // ══════════════════════════════════════════════════════════════════
@@ -63,8 +64,17 @@ function wordCount(text) {
 // Rule 1: each sentence → 1 scene
 // Rule 2: sentence < 3 words AND next sentence also < 3 words → merge into 1 scene
 // Rule 3: sentence > 7 words → ceil(words/7) scenes, same narration, diff angles
-function buildSceneBeats(sentences) {
+// Words of narration per scene. At ~150 words a minute, 7 words is a cut every ~2.8s —
+// relentless, and it is why a 2,500-word script became 430-odd scenes. The pace is now a
+// project setting; 7 stays the default so existing projects are unchanged.
+export const PACING_WORDS = { fast: 7, standard: 12, cinematic: 18 };
+const DEFAULT_WORDS_PER_BEAT = PACING_WORDS.fast;
+// A single long sentence could otherwise claim seven consecutive scenes of the same line.
+const MAX_ANGLES_PER_SENTENCE = 4;
+
+export function buildSceneBeats(sentences, wordsPerBeat = DEFAULT_WORDS_PER_BEAT, maxAngles = MAX_ANGLES_PER_SENTENCE) {
   const beats = [];
+  const perBeat = Math.max(3, Number(wordsPerBeat) || DEFAULT_WORDS_PER_BEAT);
   let i = 0;
 
   while (i < sentences.length) {
@@ -85,9 +95,9 @@ function buildSceneBeats(sentences) {
       continue;
     }
 
-    // Rule 3: long sentence > 7 words → split into ceil(wc/7) angle scenes
-    if (wc > 7) {
-      const totalAngles = Math.ceil(wc / 7);
+    // Rule 3: a long sentence is covered from several angles, up to the cap
+    if (wc > perBeat) {
+      const totalAngles = Math.min(maxAngles, Math.ceil(wc / perBeat));
       for (let a = 0; a < totalAngles; a++) {
         beats.push({
           narration_text: sentence,
@@ -160,7 +170,7 @@ const handler: FnHandler = async (body, ctx) => {
       throw new HttpError(400, 'No final script found.');
     }
 
-    const fullScript = script.full_script;
+    const fullScript = stripTtsMarkers(script.full_script);
     const durationMin = project.video_duration_minutes || 10;
 
     let nicheId = 'finance';
@@ -174,9 +184,12 @@ const handler: FnHandler = async (body, ctx) => {
     console.log(`📝 Script: ${sentences.length} sentences detected`);
 
     // ── Step 2: Apply scene rules → build beat list ──────────────────────────
-    const allBeats = buildSceneBeats(sentences);
+    // scene_pacing: 'fast' (default, a cut every ~3s), 'standard' (~5s), 'cinematic' (~7s).
+    const pacing = String(project.scene_pacing || 'fast').toLowerCase();
+    const wordsPerBeat = PACING_WORDS[pacing] || PACING_WORDS.fast;
+    const allBeats = buildSceneBeats(sentences, wordsPerBeat);
     const totalScenes = allBeats.length;
-    console.log(`🎬 Long Viral: ${durationMin}min | ${sentences.length} sentences → ${totalScenes} scene beats`);
+    console.log(`🎬 Long Viral: ${durationMin}min | ${sentences.length} sentences → ${totalScenes} scene beats | pacing ${pacing} (${wordsPerBeat} words/scene)`);
 
     // ── Step 3: Chunk beats into sub-batches for AI ──────────────────────────
     const beatChunks = chunkBeats(allBeats);

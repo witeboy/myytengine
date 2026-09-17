@@ -6,6 +6,7 @@
 import { HttpError } from '../lib/http';
 import { anthropicFetch, geminiFetch, hasAiProvider } from '../lib/ai';
 import type { FnHandler } from '../types';
+import { stripTtsMarkers } from '../lib/scriptText';
 
 // v5 — Gemini 2.5 Pro primary, Claude fallback, bulkCreate, max 12 scenes, code-controlled durations
 // ══════════════════════════════════════════════════════════════════
@@ -150,7 +151,7 @@ const handler: FnHandler = async (body, ctx) => {
     }
 
     const isMeditation = project.project_mode === 'sleep_meditation';
-    const finalScript = script.full_script;
+    const finalScript = stripTtsMarkers(script.full_script);
     const wordCount = finalScript.split(/\s+/).filter(w => w.length > 0).length;
     const durationMinutes = project.video_duration_minutes || Math.ceil(wordCount / 150);
 

@@ -6,6 +6,7 @@
 import { HttpError } from '../lib/http';
 import { anthropicFetch, geminiFetch, hasAiProvider } from '../lib/ai';
 import type { FnHandler } from '../types';
+import { stripTtsMarkers } from '../lib/scriptText';
 
 
 // ══════════════════════════════════════════════════════════════════
@@ -302,7 +303,7 @@ const handler: FnHandler = async (body, ctx) => {
       if (!script?.full_script) {
         throw new HttpError(400, 'No ScriptBatches with content and no final script found.');
       }
-      const parts = script.full_script.split(/\n(?=#{1,3}\s|\*\*[A-Z]|\d\.\s[A-Z])/g);
+      const parts = stripTtsMarkers(script.full_script).split(/\n(?=#{1,3}\s|\*\*[A-Z]|\d\.\s[A-Z])/g);
       outlineSections = parts.map((p, i) => ({
         title: `Section ${i + 1}`,
         content: p.trim(),

@@ -17,6 +17,7 @@ import { anthropicFetch, geminiFetch, hasAiProvider } from '../lib/ai';
 import type { FnHandler } from '../types';
 import explainerSceneBreakdown from './explainerSceneBreakdown';
 import { resolveStyleId } from '../lib/visualStyles';
+import { stripTtsMarkers } from '../lib/scriptText';
 
 // v6 — Gemini 2.5 Pro primary, Claude Sonnet 3.5 fallback
 
@@ -1174,7 +1175,7 @@ const handler: FnHandler = async (body, ctx) => {
       throw new HttpError(400, 'No final script found. Please generate a script first.');
     }
 
-    const cleanedScript = cleanScriptText(script.full_script);
+    const cleanedScript = cleanScriptText(stripTtsMarkers(script.full_script));
     if (!cleanedScript || cleanedScript.trim().length < 10) {
       throw new HttpError(400, 'Script is empty or too short after cleaning.');
     }

@@ -5,6 +5,7 @@
 
 import { HttpError } from '../lib/http';
 import type { Ctx, FnHandler } from '../types';
+import { stripTtsMarkers } from '../lib/scriptText';
 
 // ══════════════════════════════════════════════════════════════════
 // VOICEOVER GENERATOR — 3 Paths, No Fallback (v3)
@@ -25,7 +26,9 @@ async function uploadToR2(ctx: Ctx, audioBytes: Uint8Array, fileName: string) {
 }
 
 function cleanScript(text, isSleepMode = false) {
-  let cleaned = text;
+  // Control tokens written for another TTS engine (<|prosody:long_pause|> and friends):
+  // our voices have never heard of them and read them aloud.
+  let cleaned = stripTtsMarkers(text);
   if (isSleepMode) {
     cleaned = cleaned.replace(/\[(PAUSE\s+(\d+)\s*(?:SEC(?:ONDS?)?)?)\]/gi, (_, _c, seconds) => {
       const sec = parseInt(seconds) || 3;
