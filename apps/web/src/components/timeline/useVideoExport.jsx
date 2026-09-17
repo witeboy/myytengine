@@ -549,6 +549,9 @@ export default function useVideoExport() {
           mediaType: s.mediaType || (s.video_url && s.video_url.indexOf('http') === 0 ? 'video' : 'image'),
           videoUrl: s.videoUrl || s.video_url || '',
           imageUrl: s.imageUrl || s.image_url || '',
+          // Stock footage. Without this the export ignored a B-roll clip and rendered the
+          // scene's still image instead, so the file never matched the preview.
+          brollUrl: s.brollUrl || s.broll_url || '',
           playbackRate: s.playbackRate !== undefined ? s.playbackRate : 1.0,
           videoDuration: s.videoDuration !== undefined ? s.videoDuration : null,
           videoStartOffset: s.videoStartOffset !== undefined ? s.videoStartOffset : 0,
@@ -684,12 +687,15 @@ export default function useVideoExport() {
       var preloadTasks = clips.map(function(clip, idx) {
         return async function() {
           if (cancelledRef.current) return { media: null, mediaType: 'image', measuredVideoDur: null };
-          var wantsVideo = clip.mediaType === 'video' && clip.videoUrl && clip.videoUrl.indexOf('http') === 0;
+          // A B-roll clip plays its stock footage; everything else is unchanged.
+          var isBroll = clip.mediaType === 'broll' && clip.brollUrl && clip.brollUrl.indexOf('http') === 0;
+          var videoSrc = isBroll ? clip.brollUrl : clip.videoUrl;
+          var wantsVideo = (isBroll || clip.mediaType === 'video') && videoSrc && videoSrc.indexOf('http') === 0;
           var hasImg = clip.imageUrl && clip.imageUrl.indexOf('http') === 0;
 
           if (wantsVideo) {
             try {
-              var el = await loadVideoElement(clip.videoUrl);
+              var el = await loadVideoElement(videoSrc);
               var dur = (el.duration && isFinite(el.duration)) ? el.duration : (clip.videoDuration || 6);
               return { media: el, mediaType: 'video', measuredVideoDur: dur };
             } catch (e) {
@@ -712,7 +718,7 @@ export default function useVideoExport() {
             }
           }
 
-          var anyUrl = clip.imageUrl || clip.videoUrl;
+          var anyUrl = clip.imageUrl || clip.videoUrl || clip.brollUrl;
           if (anyUrl && anyUrl.indexOf('http') === 0) {
             try {
               var bmLast = await loadImageBitmap(anyUrl);

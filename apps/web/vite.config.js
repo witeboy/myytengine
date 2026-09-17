@@ -6,6 +6,8 @@ import path from 'node:path';
 export default defineConfig({
   logLevel: 'error', // Suppress warnings, only show errors
   server: {
+    // The visual style catalogue lives outside this app so the Worker shares the same file.
+    fs: { allow: [path.resolve(__dirname, '.'), path.resolve(__dirname, '../../shared')] },
     proxy: {
       // The session cookie is httpOnly and host-only, so the API has to look
       // same-origin in development too. Mirrors the Vercel rewrite.
@@ -18,6 +20,10 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     // The the original platform plugin used to provide this. `@/...` is used by every import in the app.
-    alias: { '@': path.resolve(__dirname, './src') },
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+      // One definition of the visual styles, shared with workers/api.
+      '@shared': path.resolve(__dirname, '../../shared'),
+    },
   },
 });

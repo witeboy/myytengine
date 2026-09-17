@@ -6,6 +6,7 @@
 import { HttpError } from '../lib/http';
 import { geminiFetch, openai } from '../lib/ai';
 import type { FnHandler } from '../types';
+import { resolveStyleId, styleMapForEngines } from '../lib/visualStyles';
 
 
 // ══════════════════════════════════════════════════════════════════
@@ -185,20 +186,7 @@ function extractDirectorNotes(imagePrompt) {
 
 
 function normalizeStyleKey(raw) {
-  if (!raw) return 'cinematic_realistic';
-  console.log(`🔍 RAW visual_style value: "${raw}" (type: ${typeof raw}, length: ${raw.length}, charCodes: ${[...raw].slice(0,30).map(c=>c.charCodeAt(0)).join(',')})`);
-  const normalized = raw.trim().toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
-  console.log(`🔍 Normalized to: "${normalized}"`);
-  if (styleMap[normalized]) { console.log(`✅ Direct match: ${normalized}`); return normalized; }
-  for (const key of Object.keys(styleMap)) {
-    if (normalized.includes(key) || key.includes(normalized)) { console.log(`✅ Fuzzy match: ${key}`); return key; }
-  }
-  if (normalized.includes('roblox')) { console.log(`✅ Keyword match: roblox`); return 'roblox'; }
-  if (normalized.includes('skeleton')) { console.log(`✅ Keyword match: skeleton_protagonist`); return 'skeleton_protagonist'; }
-  if (normalized.includes('mannequin') || normalized.includes('faceless')) { console.log(`✅ Keyword match: faceless_mannequin`); return 'faceless_mannequin'; }
-  if (normalized.includes('afro') || normalized.includes('nolly')) { console.log(`✅ Keyword match: afro_nolly_global`); return 'afro_nolly_global'; }
-  console.warn(`❌ No match for "${raw}" → "${normalized}"`);
-  return 'cinematic_realistic';
+  return resolveStyleId(raw);
 }
 
 
@@ -207,78 +195,7 @@ function normalizeStyleKey(raw) {
 // ══════════════════════════════════════════════════════════════════
 
 
-const styleMap = {
-  cinematic_realistic: {
-    positive: "Cinematic film still shot on ARRI Alexa 65 with anamorphic Panavision lenses, beautiful lens flare and chromatic aberration, shallow depth of field f/1.4 with creamy bokeh, dramatic three-point lighting with hard key light and soft fill, strong rim light separation, color graded with professional teal and orange LUT, subtle Kodak Vision3 film grain texture, volumetric god rays through atmosphere, Hollywood blockbuster cinematography, photorealistic rendering, 8K resolution",
-    negative: "cartoon, anime, illustration, painting, drawing, sketch, 3D render, CGI, video game, cel shaded, flat colors, clipart, comic book, manga, stylized, amateur, low quality, blurry, distorted, deformed, oversaturated"
-  },
-  photorealistic_4k: {
-    positive: "Ultra-photorealistic DSLR photograph shot on Canon EOS R5 with RF 85mm f/1.2 L lens, razor-sharp focus, natural ambient lighting, professional color grading, editorial photography for National Geographic, visible skin texture and pores, accurate shadows and highlights, real-world proportions, zero AI artifacts, 8K RAW quality",
-    negative: "cartoon, anime, CGI, 3D render, painting, digital art, stylized, unrealistic, soft focus, beauty filter, over-processed, HDR overdone"
-  },
-  anime: {
-    positive: "High-quality anime illustration, Studio Ghibli meets modern anime, vibrant saturated colors, clean linework, cel-shaded with soft gradients, expressive detailed eyes, detailed hair with natural flow, colorful background art with atmospheric perspective, professional anime production quality",
-    negative: "photorealistic, live action, photograph, 3D render, western cartoon, rough sketch, inconsistent style, off-model, chibi, super deformed"
-  },
-  cinematic_anime: {
-    positive: "Cinematic anime key visual, Makoto Shinkai and Ufotable production quality, dramatic volumetric lighting with god rays, ultra-detailed background art with atmospheric depth, sharp character linework with subtle cel shading, rich color grading with vibrant highlights and deep shadows, anamorphic lens effects, film grain overlay, widescreen cinematic composition, professional anime feature film quality",
-    negative: "photorealistic, live action, photograph, chibi, super deformed, rough sketch, flat colors, low budget, inconsistent proportions, western cartoon"
-  },
-  cartoon_2d: {
-    positive: "High-quality 2D cartoon illustration, bold clean outlines, vibrant flat colors with subtle gradients, expressive character design, dynamic poses, professional vector-quality artwork, Cartoon Network and Disney Channel production quality, smooth color fills, playful proportions, appealing character design, clean composition",
-    negative: "photorealistic, photograph, 3D render, anime, sketch, rough, painterly, dark, gritty, horror, complex textures, film grain, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature"
-  },
-  picstory_cocomelon: {
-    positive: "Adorable 3D rendered children's animation style, CoComelon and Pixar Junior quality, soft rounded characters with big expressive eyes, pastel color palette with bright accents, smooth plastic-like textures, warm studio lighting, cheerful and friendly atmosphere, child-safe wholesome imagery, gentle soft shadows, nursery rhyme aesthetic",
-   negative: "photorealistic, scary, dark, horror, sharp edges, complex, adult themes, violence, anime, sketch, painterly, gritty, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature"
-  },
-  cinematic_picstory: {
-    positive: "Cinematic 3D animated feature film quality, Pixar and DreamWorks level rendering, dramatic studio lighting with rim lights, rich color grading, detailed textures with subsurface scattering on skin, expressive stylized characters with realistic proportions, cinematic depth of field, volumetric atmosphere, professional animated feature film composition, emotional cinematography",
-    negative: "flat 2D, sketch, anime linework, rough, low quality, uncanny valley, photorealistic human, cheap 3D, mobile game quality, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature"
-  },
-  oil_painting: {
-    positive: "Masterful oil painting on canvas, visible thick impasto brushstrokes, rich pigment texture, classical fine art composition, Rembrandt and Vermeer lighting with chiaroscuro, warm varnish glow, gallery-quality artwork, traditional glazing technique with luminous depth, painterly color mixing on canvas, museum masterpiece quality, art historical significance",
-    negative: "photorealistic, digital, smooth, flat, cartoon, anime, 3D render, CGI, vector, clean lines, modern"
-  },
-  watercolor: {
-    positive: "Beautiful traditional watercolor painting on textured cold-press paper, soft translucent color washes with visible paper grain, delicate wet-on-wet blending, controlled bleeding edges, subtle granulation, luminous transparency where white paper shows through, gentle color harmonies, professional fine art watercolor technique, botanical illustration quality",
-    negative: "photorealistic, digital, oil painting, acrylic, cartoon, anime, 3D render, sharp edges, flat colors, bold outlines, heavy saturation"
-  },
-  comic_book: {
-    positive: "Professional comic book art, bold black ink outlines, dynamic panel composition, halftone dot shading, vibrant saturated colors with dramatic shadows, superhero and graphic novel aesthetic, Marvel and DC Comics quality artwork, strong action lines, dramatic foreshortening, professional sequential art, Ben-Day dots and cross-hatching",
-    negative: "photorealistic, photograph, soft, watercolor, painterly, anime, 3D render, pastel, muted colors, blurry, sketchy"
-  },
-  humpty_dumpty: {
-    positive: "Charming storybook illustration style, whimsical hand-drawn quality with gentle watercolor washes, rounded friendly character designs, fairy tale aesthetic, warm nostalgic nursery rhyme atmosphere, soft golden lighting, vintage children's book illustration quality, Maurice Sendak and Beatrix Potter inspired, delicate cross-hatching with pastel tones, enchanted storybook world",
-   negative: "photorealistic, modern, dark, scary, anime, 3D render, flat vector, bold colors, adult themes, sharp geometric, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature"
-  },
-  harry_potter: {
-    positive: "Magical fantasy world with warm candlelight and mysterious atmosphere, gothic castle interiors with stone textures and floating candles, rich jewel-tone color palette of deep burgundy gold and emerald, magical golden particles and ethereal glow effects, dramatic chiaroscuro lighting, weathered leather and parchment textures, enchanted artifacts with luminous properties, cozy yet mysterious British boarding school aesthetic, professional fantasy concept art quality",
-    negative: "modern, contemporary, bright fluorescent, cartoon, anime, flat colors, minimalist, sci-fi, futuristic, clinical, sterile"
-  },
-  "3d_whiteboard_cartoon": {
-    positive: "Clean 3D whiteboard cartoon, bold consistent black ink outlines, bright cheerful flat color fills with single-tone cel shading. All objects with bold outlines and flat color. Warm color palette with peach and brown tones. Even ambient lighting, no harsh shadows, YouTube explainer style, approachable professional",    negative: "photorealistic, photograph, 3D render, CGI, anime, painterly, watercolor, oil painting, sketch, dark, gritty, horror, film grain, lens flare, bokeh, dramatic shadows, neon, cyberpunk, fantasy, abstract, pixel art, low poly, voxel, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature"
-  },
-  low_poly_3d_cartoon: {
-    positive: "Stylized low-poly 3D cartoon, all geometry from visible flat-shaded polygons and triangular facets. Realistic human proportions with geometric stylization. Angular facial features, expressive eyes, defined eyebrows. Geometric hair, warm peach-tan skin with polygon-edge shading. Clothing with visible folds and flat polygon faces. All environments built from flat-shaded polygons. Vibrant saturated colors, clean polygon edges, no smoothing, matte clay-toy quality, soft ambient occlusion, sharp focused background with all elements in focus, deep depth of field, Pixar expressiveness with geometric stylization",
-   negative: "photorealistic, photograph, smooth high-poly, hyperrealistic, film grain, lens flare, bokeh, blurred background, shallow depth of field, out of focus background, anime, cel-shaded, 2D flat, hand-drawn, sketch, watercolor, oil painting, dark horror, neon cyberpunk, abstract, pixel art, voxel art, wireframe, monochrome, desaturated, ray-traced, photogrammetry, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature, funko pop"  },
-  roblox: {
-    positive: "Roblox-style 3D blocky character with cube-shaped head, rectangular torso and limbs, simple 2D cartoon face painted on the cube head (two round dot eyes, small curved mouth), bright flat-shaded matte plastic colors, toy-like R15 avatar proportions, clean geometric edges, no smoothing, Roblox game aesthetic, studio lighting, vibrant saturated colors",
-    negative: "photorealistic, photograph, realistic anatomy, detailed muscles, curved joints, high-poly mesh, smooth skin, realistic face, wrinkles, pores, film grain, bokeh, lens flare, anime, watercolor, oil painting, sketch, dark horror, scary, complex textures, realistic hair strands, chibi, funko pop"
-  },
-  skeleton_protagonist: {
-   positive: "cinematic establishing shot composition, golden hour volumetric lighting, HDR cinematic lens, warm amber grading, photorealistic detailed environment with sharp focused background, masterpiece quality",
-   negative: "real human skin, real human face, realistic flesh, normal human appearance, human skin visible through skeleton, dual character overlay, skeleton overlaid on human, x-ray medical scan, cartoon skeleton, halloween decoration, flat 2D, anime, comic, horror gore, neon, plastic toy, low quality, blurry, abstract, minimalist, sketch, painting, chibi, dia de los muertos, empty dark eye sockets, bare bones without transparent body, scary horror skeleton, torso only, bust shot, head and shoulders only, cropped at waist, isolated character on blank background, portrait crop, dark background, black background, text, words, letters, numbers, UI elements, screen content, garbled text"
-  },
-  faceless_mannequin: {
-    positive: "photorealistic period scene, every figure a faceless porcelain mannequin with a blank egg-smooth head and no human skin, low-key chiaroscuro lighting from practical sources (candles, oil lamps, firelight, a single window), warm amber, tobacco and parchment tones over deep rich blacks, soft light falloff into shadow, gentle atmospheric haze, rich tactile period textures, crisp micro-contrast, razor-sharp detail, masterpiece quality",
-    negative: "eyes, eyebrows, nose, mouth, lips, facial features, painted face, makeup, human skin, realistic human face, skin on hands, cracked porcelain, creepy doll, horror, uncanny, mask, store window display, plain studio backdrop, isolated character on blank background, cartoon, anime, 3D render, plastic toy, flat 2D, sketch, painting, bright flat lighting, high key, oversaturated, neon, text, words, letters, numbers, logos, garbled text, low quality, blurry"
-  },
-  afro_nolly_global: {
-    positive: "3D Pixar-Illumination quality CGI animation, subsurface scattering on skin, soft ambient occlusion, individually strand-rendered hair showing fiber detail, realistic cloth folds and weight on clothing, warm natural lighting, vibrant saturated colors, cinematic composition with 3-layer depth staging, dramatic exaggerated expressions, detailed clothing textures, community of onlookers with expressive shocked or amused reactions, colorful compound courtyard setting with hand-painted signs on buildings, 16:9 cinematic aspect ratio, high-quality 3D rendering, Nollywood-style community drama meets Disney Pixar aesthetic",
-    negative: "photorealistic, live action, photograph, anime, manga, watercolor, sketch, flat 2D, dark gloomy, cartoon outline style, cel-shaded, low quality, blurry, grey ashy skin tones, empty backgrounds, isolated portraits, minimalist, abstract, horror, scary, chibi, bobblehead, oversized head, text garbled, distorted letters"
-  }
-};
+const styleMap = styleMapForEngines();
 
 
 // Universal anti-crop negative (appended to ALL styles)
@@ -358,7 +275,7 @@ function getStyleSceneBodyRules(styleName) {
       objects: "Storybook objects with delicate cross-hatching, gentle watercolor fills, vintage children's book charm.",
       rendering: "Maurice Sendak / Beatrix Potter inspired — hand-drawn, watercolor washes, warm nostalgic nursery rhyme feel."
     },
-    harry_potter: {
+    gothic_candlelight: {
       characters: "Fantasy characters in robes and wizard attire, warm candlelit skin tones, weathered textures, magical glow effects on faces.",
       environments: "Gothic castle interiors — stone walls, floating candles, jewel-tone stained glass, magical golden particles, mysterious corridors.",
       objects: "Enchanted artifacts with luminous properties, weathered leather, parchment textures, magical golden glow.",
@@ -762,7 +679,9 @@ const handler: FnHandler = async (body, ctx) => {
 
 
     // ═══ UNIVERSAL: Append anti-crop negatives to ALL styles ═══
-    const effectiveNegative = (styleConfig.negative || '') + UNIVERSAL_NEGATIVE_SUFFIX;
+    // Handed to the model that writes the prompts: no image provider we call takes a
+    // negative prompt, so the only way to honour these is to never write them.
+    const styleAvoid = (styleConfig.negative || '') + UNIVERSAL_NEGATIVE_SUFFIX;
 
 
     const orientation = project.orientation || 'landscape';
@@ -951,7 +870,7 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
         `a bold ink-outlined ${bodyDesc}, ${faceDesc} rendered in halftone dots and dramatic shadow, Marvel-quality`,
       humpty_dumpty: (bodyDesc, faceDesc) =>
         `a whimsical storybook ${bodyDesc} with ${faceDesc}, rounded and warm like a fairy tale illustration`,
-      harry_potter: (bodyDesc, faceDesc) =>
+      gothic_candlelight: (bodyDesc, faceDesc) =>
         `a ${bodyDesc} bathed in candlelight, ${faceDesc} touched by magical golden particles in the gothic air`,
       "3d_whiteboard_cartoon": (bodyDesc, faceDesc) =>
         `a bold-outlined 3D whiteboard cartoon ${bodyDesc}, ${faceDesc} in flat warm color fills`,
@@ -1427,6 +1346,9 @@ ${qualityAnchors}
 **STYLE QUALITY SUFFIX (append at the END of each image_prompt as plain descriptive text, NOT the beginning):**
 ${styleConfig.positive}
 ${styleBodyBlock}
+
+**NEVER NAME THESE IN A PROMPT — the image models accept no negative prompt, so whatever you write is what gets rendered. Do not mention them even to forbid them:**
+${styleAvoid}
 
 
 **CINEMATIC LANGUAGE & CAMERA ANGLES (use these instead of generic "medium shot" or "wide shot"):**

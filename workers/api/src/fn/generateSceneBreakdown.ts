@@ -16,6 +16,7 @@ import {
 import { anthropicFetch, geminiFetch, hasAiProvider } from '../lib/ai';
 import type { FnHandler } from '../types';
 import explainerSceneBreakdown from './explainerSceneBreakdown';
+import { resolveStyleId } from '../lib/visualStyles';
 
 // v6 — Gemini 2.5 Pro primary, Claude Sonnet 3.5 fallback
 
@@ -245,20 +246,9 @@ function buildSceneBeats(sentences) {
 }
 
 function normalizeStyleKey(raw) {
+  // No style set means "no style directive", which is not the same as the default.
   if (!raw) return '';
-  const normalized = raw.trim().toLowerCase().replace(/[\s\-]+/g, '_');
-  const knownStyles = [
-    'cinematic_realistic', 'photorealistic_4k', 'anime', 'cinematic_anime',
-    'cartoon_2d', 'picstory_cocomelon', 'cinematic_picstory', 'oil_painting',
-    'watercolor', 'comic_book', 'humpty_dumpty', 'harry_potter',
-    '3d_whiteboard_cartoon', 'low_poly_3d_cartoon', 'skeleton_protagonist',
-    'afro_nolly_global', 'faceless_mannequin'
-  ];
-  if (knownStyles.includes(normalized)) return normalized;
-  for (const key of knownStyles) {
-    if (normalized.includes(key) || key.includes(normalized)) return key;
-  }
-  return normalized;
+  return resolveStyleId(raw);
 }
 
 function getStyleCharacterDirective(visualStyle) {

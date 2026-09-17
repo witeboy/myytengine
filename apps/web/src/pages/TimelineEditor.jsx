@@ -1021,8 +1021,11 @@ export default function TimelineEditor() {
       };
 
       const syncedWithRates = await Promise.all(synced.map(async (clip) => {
-        if (clip.mediaType !== 'video' || !clip.videoUrl) return clip;
-        const vidDur  = await measureVideoDur(clip.videoUrl);
+        // B-roll is footage too: without measuring it, a stock clip shorter than its
+        // scene froze on its last frame instead of looping or slowing down.
+        const clipUrl = clip.mediaType === 'broll' ? clip.brollUrl : clip.videoUrl;
+        if ((clip.mediaType !== 'video' && clip.mediaType !== 'broll') || !clipUrl) return clip;
+        const vidDur  = await measureVideoDur(clipUrl);
         const beatDur = clip.duration;
         if (clip.manualSpeed) return { ...clip, videoDuration: vidDur };
         if (beatDur <= vidDur)  return { ...clip, playbackRate: 1.0, videoLoop: false, videoDuration: vidDur };
@@ -1093,7 +1096,9 @@ export default function TimelineEditor() {
         imageUrl: existing?.imageUrl || scene.image_url || null,
         videoUrl: existing?.videoUrl || (hasVideo ? scene.video_url : null),
         brollUrl: existing?.brollUrl || (hasBroll ? scene.broll_url : null),
-        mediaType: existing?.mediaType || (hasVideo ? 'video' : 'image'),
+        // A B-Roll Only project has stock footage and no generated image, so an 'image'
+        // default left the clip blank.
+        mediaType: existing?.mediaType || (hasVideo ? 'video' : (hasBroll && !scene.image_url ? 'broll' : 'image')),
         effects: existing?.effects || [],
         cinematicMotion: existing?.cinematicMotion || null,
         transition: existing?.transition || null,

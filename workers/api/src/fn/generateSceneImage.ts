@@ -4,6 +4,7 @@
 // Prompt strings are copied byte-for-byte. Prove it: tools/verify-prompts.mjs
 
 import { HttpError } from '../lib/http';
+import { isBrollOnlyStyle } from '../lib/visualStyles';
 import type { FnHandler } from '../types';
 
 
@@ -478,6 +479,12 @@ const handler: FnHandler = async (body, ctx) => {
 
     if (!project) throw new HttpError(404, "Project not found");
 
+    // B-Roll Only projects show stock footage. Generating images for them costs money and
+    // produces pictures nothing ever displays.
+    if (isBrollOnlyStyle(project.visual_style)) {
+      throw new HttpError(400, 'This project is set to B-Roll Only, so it uses stock footage instead of generated images. Run Auto B-Roll, or pick a visual style to generate images.');
+    }
+
     if (scenesToProcess.length === 0) {
       return { success: true, done: true, message: "No scenes pending", total_processed: 0 };
     }
@@ -537,7 +544,8 @@ const handler: FnHandler = async (body, ctx) => {
 
   } catch (error) {
     console.error("❌ generateSceneImage error:", error.message);
-    throw new HttpError(500, error.message);
+    // Keep a deliberate 4xx (and its explanation) instead of reporting a server fault.
+    throw error instanceof HttpError ? error : new HttpError(500, error.message);
   }
 };
 

@@ -5,6 +5,7 @@
 
 import { HttpError } from '../lib/http';
 import { geminiFetch } from '../lib/ai';
+import { rankStockClips } from '../lib/brollRanking';
 import type { FnHandler } from '../types';
 
 
@@ -41,18 +42,25 @@ async function callGemini(ctx, prompt, temperature = 0.3) {
   }
 }
 
-async function searchPexels(ctx, query, orientation) {
+// `problems` collects why a search came back empty. Without it a missing key or a
+// rate-limited provider looked exactly like "no footage exists for this scene".
+async function searchPexels(ctx, query, orientation, problems = []) {
   const apiKey = await ctx.keys.get('PEXELS_API_KEY');
   if (!apiKey) return [];
   const params = new URLSearchParams({
-    query, per_page: '5', page: '1',
+    query, per_page: '8', page: '1',
     orientation: orientation === 'portrait' ? 'portrait' : 'landscape',
   });
   try {
     const res = await fetch(`https://api.pexels.com/videos/search?${params}`, {
       headers: { 'Authorization': apiKey }
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      problems.push(res.status === 401 || res.status === 403
+        ? 'Pexels rejected the API key'
+        : `Pexels answered HTTP ${res.status}`);
+      return [];
+    }
     const data = await res.json();
     return (data.videos || []).map(v => {
       const files = v.video_files || [];
@@ -71,19 +79,24 @@ async function searchPexels(ctx, query, orientation) {
         author: v.user?.name,
       };
     });
-  } catch (e) { console.warn('Pexels error:', e.message); return []; }
+  } catch (e) { problems.push(`Pexels: ${e.message}`); console.warn('Pexels error:', e.message); return []; }
 }
 
-async function searchPixabay(ctx, query) {
+async function searchPixabay(ctx, query, problems = []) {
   const apiKey = await ctx.keys.get('PIXABAY_API_KEY');
   if (!apiKey) return [];
   const params = new URLSearchParams({
     key: apiKey, q: query, video_type: 'film',
-    per_page: '5', safesearch: 'true', order: 'popular',
+    per_page: '8', safesearch: 'true', order: 'popular',
   });
   try {
     const res = await fetch(`https://pixabay.com/api/videos/?${params}`);
-    if (!res.ok) return [];
+    if (!res.ok) {
+      problems.push(res.status === 400 || res.status === 401
+        ? 'Pixabay rejected the API key'
+        : `Pixabay answered HTTP ${res.status}`);
+      return [];
+    }
     const data = await res.json();
     return (data.hits || []).map(v => {
       const vids = v.videos || {};
@@ -100,7 +113,14 @@ async function searchPixabay(ctx, query) {
         author: v.user,
       };
     });
-  } catch (e) { console.warn('Pixabay error:', e.message); return []; }
+  } catch (e) { problems.push(`Pixabay: ${e.message}`); console.warn('Pixabay error:', e.message); return []; }
+}
+
+/** The breakdown stores its shot notes as a DIRECTOR_NOTES: prefix on image_prompt. */
+function directorNotes(scene) {
+  const raw = scene?.image_prompt;
+  if (typeof raw !== 'string' || !raw.startsWith('DIRECTOR_NOTES:')) return {};
+  try { return JSON.parse(raw.slice(15)) || {}; } catch (_) { return {}; }
 }
 
 const handler: FnHandler = async (body, ctx) => {
@@ -136,6 +156,17 @@ const handler: FnHandler = async (body, ctx) => {
     const orientation = project.orientation || 'landscape';
     const niche = project.niche || 'general';
 
+    // Both searches used to return an empty list when their key was missing, so a project
+    // with no stock provider reported "0 scenes matched" and looked like a search miss.
+    const [pexelsKey, pixabayKey] = await Promise.all([
+      ctx.keys.get('PEXELS_API_KEY'),
+      ctx.keys.get('PIXABAY_API_KEY'),
+    ]);
+    if (!pexelsKey && !pixabayKey) {
+      throw new HttpError(400, 'No stock footage provider is set up. Add a Pexels API key under Settings → API Keys (Pixabay is optional) and run Auto B-Roll again.');
+    }
+    const problems: string[] = [];
+
     console.log(`🎬 Auto B-Roll: ${scenes.length} scenes | niche: ${niche} | orientation: ${orientation}`);
 
     // Process scenes in batches through Gemini
@@ -146,12 +177,18 @@ const handler: FnHandler = async (body, ctx) => {
       const batch = scenes.slice(batchStart, batchStart + BATCH_SIZE);
 
       // Step 1: Ask Gemini to generate optimal search queries
-      const sceneSummaries = batch.map(s => ({
-        scene_number: s.scene_number,
-        narration: (s.narration_text || '').substring(0, 300),
-        mood: s.emotional_tone || '',
-        environment: s.scene_environment || '',
-      }));
+      // Mood and environment used to be read off the Scene row, where neither field
+      // exists — both were always undefined, and the prompt dropped them anyway. They
+      // come from the breakdown's director notes.
+      const sceneSummaries = batch.map(s => {
+        const notes = directorNotes(s);
+        return {
+          scene_number: s.scene_number,
+          narration: (s.narration_text || '').substring(0, 300),
+          visual: (notes.visual_description || notes.visual_concept || '').substring(0, 200),
+          mood: [notes.mood, notes.lighting, notes.color_palette].filter(Boolean).join(', ').substring(0, 120),
+        };
+      });
 
       const geminiPrompt = `You are a B-roll video researcher for a ${niche} YouTube channel.
 
@@ -167,7 +204,11 @@ RULES:
 - Think about what would LOOK GOOD as background footage while someone narrates
 
 SCENES:
-${sceneSummaries.map(s => `Scene ${s.scene_number}: "${s.narration}"`).join('\n')}
+${sceneSummaries.map(s => [
+  `Scene ${s.scene_number}: "${s.narration}"`,
+  s.visual ? `  Shot the director asked for: ${s.visual}` : '',
+  s.mood ? `  Mood and light: ${s.mood}` : '',
+].filter(Boolean).join('\n')).join('\n')}
 
 Return JSON:
 {
@@ -198,14 +239,20 @@ Return JSON:
 
         // Search both queries across both sources in parallel
         const [pexPrimary, pixPrimary, pexAlt, pixAlt] = await Promise.all([
-          searchPexels(ctx, q.primary, orientation),
-          searchPixabay(ctx, q.primary),
-          searchPexels(ctx, q.alternative, orientation),
-          searchPixabay(ctx, q.alternative),
+          searchPexels(ctx, q.primary, orientation, problems),
+          searchPixabay(ctx, q.primary, problems),
+          searchPexels(ctx, q.alternative, orientation, problems),
+          searchPixabay(ctx, q.alternative, problems),
         ]);
 
-        // Merge and deduplicate
-        const allVideos = [...pexPrimary, ...pixPrimary, ...pexAlt, ...pixAlt];
+        // Merge and deduplicate. Results for the primary query are marked so the ranking
+        // can prefer them over the fallback angle.
+        const allVideos = [
+          ...pexPrimary.map(v => ({ ...v, fromPrimary: true })),
+          ...pixPrimary.map(v => ({ ...v, fromPrimary: true })),
+          ...pexAlt,
+          ...pixAlt,
+        ];
         const seen = new Set();
         const unique = allVideos.filter(v => {
           if (!v.downloadUrl || seen.has(v.downloadUrl)) return false;
@@ -213,17 +260,10 @@ Return JSON:
           return true;
         });
 
-        // Rank: prefer longer clips, HD, and primary query results
-        const ranked = unique.sort((a, b) => {
-          // Prefer videos with actual download URLs
-          if (a.downloadUrl && !b.downloadUrl) return -1;
-          if (!a.downloadUrl && b.downloadUrl) return 1;
-          // Prefer HD/larger resolution
-          const aRes = (a.width || 0) * (a.height || 0);
-          const bRes = (b.width || 0) * (b.height || 0);
-          if (aRes !== bRes) return bRes - aRes;
-          // Prefer longer clips (more usable)
-          return (b.duration || 0) - (a.duration || 0);
+        // Rank for THIS scene: cover its length, match its shape, then look sharp.
+        const ranked = rankStockClips(unique, {
+          neededSeconds: Number(scene.duration_seconds) || 5,
+          portrait: orientation === 'portrait',
         });
 
         return {
@@ -290,11 +330,14 @@ Return JSON:
       populated: totalPopulated,
       total: allEligible.length,
       remaining: hasMore ? unpopulated.length - scenes.length : 0,
+      // What went wrong upstream, so "0 scenes matched" can say why.
+      warnings: [...new Set(problems)].slice(0, 5),
       results,
     };
   } catch (error) {
     console.error('autoBrollPopulate error:', error.message);
-    throw new HttpError(500, error.message);
+    // A 400 that explains a missing key must not be flattened into a 500.
+    throw error instanceof HttpError ? error : new HttpError(500, error.message);
   }
 };
 

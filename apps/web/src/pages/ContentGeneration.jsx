@@ -529,8 +529,45 @@ export default function ContentGeneration() {
   // Shared helper used by both auto-import and manual button.
   // Works for ALL project types (Shorts and standard).
   // ═══════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════
+  // B-ROLL ONLY: stock footage instead of generated images
+  // Matches every scene to a Pexels/Pixabay clip, 20 scenes per call.
+  // ═══════════════════════════════════════════════════════════════
+  const runBrollPopulate = async ({ onProgress } = {}) => {
+    const notify = onProgress || (() => {});
+    const isSleep = isSleepModeFn(resolveProjectMode(project, null).mode);
+    const fnName = isSleep ? 'sleepBrollPopulate' : 'autoBrollPopulate';
+    notify('Finding stock footage for every scene...');
+
+    let done = false;
+    let populated = 0;
+    let warnings = [];
+    for (let attempt = 0; attempt < 40 && !done; attempt++) {
+      const res = await api.functions.invoke(fnName, { project_id: projectId });
+      const data = res?.data || res;
+      if (data?.error) throw new Error(data.error);
+      populated += data.populated || 0;
+      warnings = data.warnings?.length ? data.warnings : warnings;
+      done = data.done !== false; // the sleep variant finishes in one call
+      notify(`Matching stock footage... ${populated}/${data.total || '?'} scenes`);
+    }
+
+    await refetchScenes();
+    if (warnings.length) {
+      toast({ title: 'Some stock searches failed', description: warnings.join(' · '), duration: 10000 });
+    }
+    if (populated === 0) {
+      throw new Error('No stock footage matched these scenes. Check your Pexels key under Settings → API Keys.');
+    }
+  };
+
   const runPromptGeneration = async ({ onProgress } = {}) => {
     const notify = onProgress || (() => {});
+    // B-Roll Only projects never generate images, so there is nothing to write prompts for.
+    if ((project?.visual_style || '') === 'broll_only') {
+      await runBrollPopulate({ onProgress: notify });
+      return;
+    }
     notify('Converting director notes into visual prompts...');
 
     let promptsDone = false;
@@ -1096,6 +1133,21 @@ export default function ContentGeneration() {
   // ══════════════════════════════════════════════════════════════════
   const handleGenerateImages = async () => {
     console.log('🚀 handleGenerateImages — submit+poll architecture');
+    // B-Roll Only means stock footage, not generated images. This used to run the image
+    // pipeline anyway and bill for pictures the project never shows.
+    if ((project?.visual_style || '') === 'broll_only') {
+      setGeneratingImages(true);
+      try {
+        await runBrollPopulate({ onProgress: (msg) => setImageProgress({ current: 0, total: scenes.length, sceneName: msg }) });
+        toast({ title: 'Stock footage ready', description: 'Every scene was matched to a clip. Open the timeline to review them.' });
+      } catch (err) {
+        toast({ title: 'Stock footage failed', description: err.message, variant: 'destructive', duration: 10000 });
+      } finally {
+        setGeneratingImages(false);
+        setImageProgress({ current: 0, total: 0, sceneName: '' });
+      }
+      return;
+    }
     setGeneratingImages(true);
     pollAbortRef.current = false;
 

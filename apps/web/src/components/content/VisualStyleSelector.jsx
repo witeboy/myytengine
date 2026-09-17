@@ -1,30 +1,12 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Palette, Check } from 'lucide-react';
+import catalogue from '@shared/visual-styles.json';
 
-const STYLES = [
-  { id: 'sleep_ambient', label: 'Sleep Ambient', desc: 'Dark moody oil paintings with no style injection — pure environment scenes for sleep content', emoji: '🌙' },
-  { id: 'broll_only', label: 'B-Roll Only', desc: 'Skip AI images — use stock B-roll footage for all scenes', emoji: '🎥' },
-  { id: 'cinematic_realistic', label: 'Cinematic Realistic', desc: 'Hollywood-grade cinematic look with dramatic lighting', emoji: '🎬' },
-  { id: 'photorealistic_4k', label: 'Photorealistic 4K', desc: 'Ultra-realistic photography, sharp detail', emoji: '📸' },
-  { id: 'cinematic_anime', label: 'Cinematic Anime', desc: 'Anime style with cinematic composition and lighting', emoji: '⚔️' },
-  { id: 'anime', label: 'Anime', desc: 'Classic anime/manga illustration style', emoji: '🎌' },
-  { id: 'cartoon_2d', label: '2D Cartoon', desc: 'Flat 2D cartoon with bold colors and outlines', emoji: '🖍️' },
-  { id: 'picstory_cocomelon', label: 'PicStory / Cocomelon', desc: '3D rendered children\'s animation style', emoji: '🧸' },
-  { id: 'cinematic_picstory', label: 'Cinematic PicStory', desc: 'Cinematic 3D animation like Pixar/DreamWorks', emoji: '✨' },
-  { id: 'oil_painting', label: 'Oil Painting', desc: 'Classical oil painting style with rich textures', emoji: '🎨' },
-  { id: 'watercolor', label: 'Watercolor', desc: 'Soft watercolor illustration style', emoji: '💧' },
-  { id: 'comic_book', label: 'Comic Book', desc: 'Bold comic book panels with halftone effects', emoji: '💥' },
-  { id: 'humpty_dumpty', label: 'Humpty Dumpty', desc: 'Minimalist stick-figure cartoon with circle heads & flat colors', emoji: '🥚' },
-  { id: 'harry_potter', label: 'Harry Potter', desc: 'Dark whimsical illustration with teal atmosphere & gothic charm', emoji: '🧙' },
-  { id: '3d_whiteboard_cartoon', label: '3D Whiteboard Cartoon', desc: 'Clean cartoon outlines, bright flat colors, isometric depth, explainer style', emoji: '🖊️' },
-  { id: 'low_poly_3d_cartoon', label: 'Low-Poly 3D Cartoon', desc: 'Faceted geometric 3D characters, vibrant suburban worlds, Pixar-meets-polygon charm', emoji: '🔷' },
-  { id: 'roblox', label: 'Roblox', desc: 'Blocky cube-head characters with rectangular limbs, simple 2D faces, bright flat colors — R6/R15 avatar style', emoji: '🧱' },
-  { id: 'skeleton_protagonist', label: 'Skeleton Protagonist (Viral)', desc: 'Transparent glass skeleton with expressive eyes in photorealistic worlds — Bernard Films style', emoji: '💀' },
-  { id: 'faceless_mannequin', label: 'Faceless Mannequin History', desc: 'Faceless white porcelain mannequins in candlelit, period-accurate worlds — chiaroscuro, amber over deep black, razor-sharp texture', emoji: '🕯️' },
-  { id: 'afro_nolly_global', label: 'Afro-Nolly-Global', desc: '3D Pixar-quality African drama — Nollywood meets Disney with vibrant compounds, expressive characters, and warm cinematic lighting', emoji: '🌍' },
-  { id: 'explainer_diagram', label: 'Explainer Diagram', desc: 'Einstein-led educational scenes with photorealistic 3D characters, clean diagrams, formulas, and code blocks — Veritasium/Cleo Abram style', emoji: '🎓' },
-];
+// The styles come from shared/visual-styles.json — the same file the prompt engines read.
+// This list used to be maintained separately, which shipped cards no engine knew about
+// (B-Roll Only did nothing) and cards for styles the project mode sets on its own.
+const STYLES = catalogue.styles.filter(s => s.pickable);
 
 export default function VisualStyleSelector({ selectedStyle, onSelect }) {
   return (
